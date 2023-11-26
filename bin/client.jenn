@@ -1,0 +1,50 @@
+Node(head) {
+	map<Key, Value> mp = {};
+	Node next = Options(mid, tail);
+
+	func read(key) -> val {
+		if (mp[key].isDirty) {
+			val = rpc_call(tail, read(key));
+			return val;
+		} else {
+			return mp[key];
+		}
+	}
+	
+	func write(key, val) -> none {
+		mp[key] = val;
+		mp[key].isDirty = true;
+		rpc_call(next, write(key, val));
+		mp[key].isDirty = false;
+	}
+}
+
+Node(mid) {
+	map<Key, Value> mp = {};
+	Node prev = Options(head, server);
+	Node next = Options(mid, tail);
+
+	func read(key)->val {
+		if (mp[key].isDirty) {
+			val = rpc_call(tail, read(key));
+			return val;
+		} else {
+			return mp[key];
+		} 
+	}
+}
+
+Node(tail) {
+	map<Key, Value> mp = {};
+	Node prev = Options(head, mid);	
+
+	func read(key)->val {
+		if (mp[key].isDirty) {
+			val = rpc_call(tail, read(key));
+			return val;
+		} else {
+			return mp[key];
+		} 
+	}
+
+}

@@ -1,0 +1,15 @@
+
+(menhir
+ (modules parser))
+
+(ocamllex lexer)
+
+(library
+ (name mylib)
+ (libraries core)
+ (modules ast parser lexer))
+
+; (executable
+;  (name main)
+;  (libraries core)
+;  (modules main ast parser lexer))
