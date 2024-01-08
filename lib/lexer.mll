@@ -64,6 +64,7 @@ rule token = parse
   | "Options" { OPTIONS }
   | "return" { RETURN }
   | "rpc_call" { RPC_CALL }
+  | "ClientInterface" { CLIENT_INTERFACE }
   | id as s { ID s }
   | eof { EOF }
   (* | _ as c 

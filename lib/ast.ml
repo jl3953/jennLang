@@ -53,4 +53,6 @@ type var_init = VarInit of type_def * string * default_value
 
 type role_def = RoleDef of string * param list * var_init list * func_def list
 
-type prog = Prog of role_def list
+type client_def = ClientDef of func_def list
+
+type prog = Prog of role_def list * client_def

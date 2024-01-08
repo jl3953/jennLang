@@ -6,6 +6,7 @@
 %token <string> ID
 %token <bool> TRUE FALSE
 %token ARROW
+%token CLIENT_INTERFACE
 %token COMMA
 %token EQUALS
 %token FUNC
@@ -50,11 +51,13 @@
 %%
 
 program:
-  | role = role_def p = program
-    { let Prog fs = p in Prog (role :: fs) }
-  | role = role_def EOF
-    { Prog(role :: []) }
+  | r = role_def c = client_def EOF
+    { Prog(r::[], c) }
+  | r = role_def p = program
+    { match p with
+      | Prog(roles, client) -> Prog(r::roles, client)}
 
+  
 func_call: 
   | name = ID LEFT_PAREN RIGHT_PAREN 
     { FuncCall(name, []) }
@@ -216,3 +219,9 @@ role_def:
     func_defs = func_defs
     RIGHT_CURLY_BRACE
     { RoleDef(id, params, var_inits, func_defs) }
+
+client_def:
+  | CLIENT_INTERFACE LEFT_CURLY_BRACE
+    func_defs = func_defs
+    RIGHT_CURLY_BRACE
+    { ClientDef(func_defs) }

@@ -1,50 +1,69 @@
 Node(head) {
-	map<Key, Value> mp = {};
-	Node next = Options(mid, tail);
+	map<Key, Value> db = {};
+	Node successor = Options(Mid, Tail);
 
-	func read(key) -> val {
-		if (mp[key].isDirty) {
-			val = rpc_call(tail, read(key));
+	func Read(key) -> val {
+		if (db[key].isDirty) {
+			val = rpc_call(tail, Read(key));
 			return val;
 		} else {
-			return mp[key];
+			return db[key];
 		}
 	}
 	
-	func write(key, val) -> none {
-		mp[key] = val;
-		mp[key].isDirty = true;
+	func Write(key, val) -> none {
+		db[key] = val;
+		db[key].isDirty = true;
 		rpc_call(next, write(key, val));
-		mp[key].isDirty = false;
+		db[key].isDirty = false;
 	}
 }
 
-Node(mid) {
-	map<Key, Value> mp = {};
-	Node prev = Options(head, server);
-	Node next = Options(mid, tail);
+Node(Mid) {
+	map<Key, Value> db = {};
+	Node predecessor = Options(Head, node);
+	Node successor = Options(Mid, Tail);
 
-	func read(key)->val {
-		if (mp[key].isDirty) {
-			val = rpc_call(tail, read(key));
+	func Read(Key)->Val {
+		if (db[key].isDirty) {
+			val = rpc_call(Tail, Read(key));
 			return val;
 		} else {
-			return mp[key];
+			return db[key];
 		} 
+	}
+
+	func write(key, val) -> none {
+		db[key] = val;
+		db[key].isDirty = true;
+		rpc_call(successor, write(key, val));
+		db[key].isDirty = false;
 	}
 }
 
-Node(tail) {
-	map<Key, Value> mp = {};
-	Node prev = Options(head, mid);	
+Node(Tail) {
+	map<Key, Value> db = {};
+	Node predecessor = Options(Head, Mid);	
 
-	func read(key)->val {
-		if (mp[key].isDirty) {
-			val = rpc_call(tail, read(key));
-			return val;
-		} else {
-			return mp[key];
-		} 
+	func Read(key)->val {
+		return db[key];
 	}
 
+	func write(key, val) -> none {
+		db[key] = val;
+		db[key].isDirty = false;
+	}
+}
+
+ClientInterface {
+
+	func Read(key) -> val {
+		dest = Options(Head, Mid, Tail);
+		val = rpc_call(dest, Read(key));
+		return val;
+	}
+
+	func Write(key, val) -> none {
+		rpc_call(Head, Write(key, val));
+	}
 }
