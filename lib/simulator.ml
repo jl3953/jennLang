@@ -36,8 +36,9 @@ type lhs =
 [@@deriving ord]
 
 type instr =
-  | Assign of lhs * expr
-  | Async of lhs * string * string * (expr list)
+  | Assign of lhs * expr (* jenndbg probably assigning map values? *)
+  | Async of lhs * string * string * (expr list) (* jenndbg RPC*)
+  | Write (* jenndbg write a value *)
 [@@deriving ord]
 
 (* Static types *)
@@ -48,6 +49,7 @@ type typ =
   | TOption of typ
   | TFuture of typ
   | TNode
+  | TString
 
 (* Run-time values *)
 type value =
@@ -57,6 +59,7 @@ type value =
   | VOption of (value option)
   | VFuture of (value option) ref
   | VNode of int
+  | VString of string
 
 (* Run-time value of a left-hand-side *)
 type lvalue =
@@ -70,25 +73,26 @@ module Env = Hashtbl.Make(struct
   end)
 
 type 'a label =
-  | Instr of instr * 'a
+  | Instr of instr * 'a (* jenndbg assignments or RPCs *)
   | Pause of 'a   (* Insert pause to allow the scheduler to interrupt! *)
   | Await of lhs * expr * 'a
-  | Return of expr
+  | Return of expr (* jenndbg return...I guess? *)
+  | Read (* jenndbg read a value *)
   | Cond of expr * 'a * 'a
 
 module CFG : sig
-  type t
-  type vertex
-  val empty : unit -> t
-  val label : t -> vertex -> vertex label
-  val set_label : t -> vertex -> vertex label -> unit
-  val create_vertex : t -> vertex label -> vertex
-  val fresh_vertex : t -> vertex
+  type t (* jenndbg: control flow graph type *)
+  type vertex (* jenndbg: vertex of the control flow graph *)
+  val empty : unit -> t (* jenndbg: create an empty control flow graph *)
+  val label : t -> vertex -> vertex label (* jenndbg: gets vertex label of vertex*)
+  val set_label : t -> vertex -> vertex label -> unit (* jenndbg: sets vertex label of vertex *)
+  val create_vertex : t -> vertex label -> vertex (* jenndbg: creates a vertex with label *)
+  val fresh_vertex : t -> vertex (* jenndbg creates an empty vertex without passing in a label*)
 end = struct
   type vertex = int
   type t = (vertex label) DA.t
   let empty = DA.create
-  let label = DA.get
+  let label = DA.get (* jenndbg includes an instruction + PC *)
   let set_label = DA.set
   let create_vertex cfg label =
     let id = DA.length cfg in
@@ -96,11 +100,13 @@ end = struct
     id
   let fresh_vertex cfg =
     let id = DA.length cfg in
-    DA.add cfg (Instr (Assign (LVar "Skip", EVar "skip"), id));
+    DA.add cfg (Instr (Assign (LVar "Skip", EVar "skip"), id)); (*jenndbg so this is how you create a vertex*)
     id
 end
 
 (* Activation records *)
+(* jenndbg I think nodes are uniquely identified by their IDs *)
+(* jenndbg I think a record is a type of vertex*)
 type record =
   { mutable pc : CFG.vertex
   ; node : int
@@ -139,14 +145,15 @@ type function_info =
 
 (* Representation of program syntax *)
 type program =
-  { cfg : CFG.t
-  ; rpc : function_info Env.t
-  ; client_ops : function_info list }
+  { cfg : CFG.t (* jenndbg this is its control flow *)
+  ; rpc : function_info Env.t 
+  ; client_ops : function_info list }(* jenndbg why does an RPC handler need a list of function info *)
 
 let load (var : string) (env : record_env) : value =
   try Env.find env.local_env var
   with Not_found -> Env.find env.node_env var
 
+(* Evaluate an expression in the context of an environment. *)
 let rec eval (env : record_env) (expr : expr) : value =
   match expr with
   | EInt i -> VInt i
@@ -177,7 +184,7 @@ let rec eval_lhs (env : record_env) (lhs : lhs) : lvalue =
 
 let store (lhs : lhs) (vl : value) (env : record_env) : unit =
   match eval_lhs env lhs with
-  | LVVar var ->
+  | LVVar var -> 
     if Env.mem env.local_env var then
       Env.replace env.local_env var vl
     else
@@ -197,10 +204,10 @@ let exec (state : state) (program : program) (record : record) =
   in
   let rec loop () =
     match CFG.label program.cfg record.pc with
-    | Instr (instr, next) ->
+    | Instr (instr, next) -> print_endline "Instr";
       record.pc <- next;
       begin match instr with
-        | Async (lhs, node, func, actuals) ->
+        | Async (lhs, node, func, actuals) -> print_endline "Async";
           begin match load node env with
             | VNode node_id ->
               let new_future = ref None in
@@ -220,11 +227,18 @@ let exec (state : state) (program : program) (record : record) =
               state.records <- new_record::state.records
             | _ -> failwith "Type error!"
           end
-        | Assign (lhs, rhs) ->
+        | Assign (lhs, rhs) -> print_endline "Assign";
           store lhs (eval env rhs) env
+        | Write -> print_endline "Write";
+          let key = match Env.find record.env "key" with 
+            | VString s -> s 
+            | _ -> failwith "Type error!" in
+          let lhs = LVar key in 
+          let rhs = Env.find record.env "value" in
+          store lhs rhs env;
       end;
       loop ()
-    | Cond (cond, bthen, belse) ->
+    | Cond (cond, bthen, belse) -> print_endline "Cond";
       begin match eval env cond with
         | VBool true ->
           record.pc <- bthen
@@ -233,7 +247,7 @@ let exec (state : state) (program : program) (record : record) =
         | _ -> failwith "Type error!"
       end;
       loop ()
-    | Await (lhs, expr, next) ->
+    | Await (lhs, expr, next) -> print_endline "Await";
       begin match eval env expr with
         | VFuture fut ->
           begin match !fut with
@@ -249,20 +263,25 @@ let exec (state : state) (program : program) (record : record) =
           end
         | _ -> failwith "Type error!"
       end
-    | Return expr ->
+    | Return expr -> print_endline "Return";
       record.continuation (eval env expr)
-    | Pause next ->
+    | Read -> print_endline "Read";
+      let expr = match Env.find record.env "key" with
+        | VString s -> EVar s
+        | _ -> failwith "Type error!" in 
+      record.continuation(eval env expr)
+    | Pause next -> print_endline "Pause";
       record.pc <- next;
       state.records <- record::state.records
 
   in
   loop ()
 
-let schedule_record (state : state) (program : program) : unit =
+let schedule_record (state : state) (program : program): unit =
   let rec pick n before after =
     match after with
     | [] -> raise Halt
-    | (r::rs) ->
+    | (r::rs) -> 
       if n == 0 then begin
         state.records <- List.rev_append before rs;
         exec state program r
@@ -273,29 +292,33 @@ let schedule_record (state : state) (program : program) : unit =
 
 (* Choose a client without a pending operation, create a new activation record
    to execute it, and append the invocation to the history *)
-let schedule_client (state : state) (program : program) : unit =
+let schedule_client (state : state) (program : program) (opIdx : int) (actuals : value list): unit =
   let rec pick n before after =
     match after with
     | [] -> raise Halt 
     | (c::cs) ->
       if n == 0 then begin
         let op =
-          List.nth program.client_ops (Random.int (List.length program.client_ops))
+          List.nth program.client_ops opIdx
+          (* List.nth program.client_ops (Random.int (List.length program.client_ops)) *)
         in
         let env = Env.create 91 in
-        let params =
+          List.iter2 (fun (formal, _) actual ->
+              Env.add env formal actual)
+            op.formals
+            actuals;
+        (* let params =
           List.map (fun (formal, _) ->
               (* TODO: generate random parameters *)
               let value = (VInt 0) in
               Env.add env formal value;
               value)
-            op.formals
-        in
+            op.formals *)
         let invocation =
           { client_id = c
           ; op_action = op.name
           ; kind = Invocation
-          ; payload = params }
+          ; payload = actuals }
         in
         let continuation value =
           (* After completing the operation, add response to the history and
