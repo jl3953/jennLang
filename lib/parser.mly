@@ -130,7 +130,7 @@ options:
 
 default_val:
   | LEFT_CURLY_BRACE RIGHT_CURLY_BRACE
-    { Map([]) }
+    { EmptyMap }
   | OPTIONS LEFT_PAREN opts = options RIGHT_PAREN
     { Options(opts) }
 

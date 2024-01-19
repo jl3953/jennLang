@@ -38,8 +38,8 @@ type lhs =
 
 type instr =
   | Assign of lhs * expr (* jenndbg probably assigning map values? *)
-  | Async of lhs * string * string * (expr list) (* jenndbg RPC*)
-  | Write of string * string (* jenndbg write a value *)
+  | Async of lhs * string * string * (expr list) (* jenndbg RPC*) 
+  (* | Write of string * string (*jenndbg write a value *) *)
 [@@deriving ord]
 
 (* Static types *)
@@ -78,7 +78,7 @@ type 'a label =
   | Pause of 'a   (* Insert pause to allow the scheduler to interrupt! *)
   | Await of lhs * expr * 'a
   | Return of expr (* jenndbg return...I guess? *)
-  | Read (* jenndbg read a value *)
+  (*| Read (* jenndbg read a value *)*)
   | Cond of expr * 'a * 'a
 
 module CFG : sig
@@ -148,9 +148,10 @@ type function_info =
 type program =
   { cfg : CFG.t (* jenndbg this is its control flow *)
   ; rpc : function_info Env.t 
-  ; client_ops : function_info list }(* jenndbg why does an RPC handler need a list of function info *)
+  ; client_ops : function_info Env.t }(* jenndbg why does an RPC handler need a list of function info *)
 
 let load (var : string) (env : record_env) : value =
+  print_endline ("Loading " ^ var);
   try Env.find env.local_env var
   with Not_found -> Env.find env.node_env var
 
@@ -233,13 +234,13 @@ let exec (state : state) (program : program) (record : record) =
           end
         | Assign (lhs, rhs) -> print_endline "Assign";
           store lhs (eval env rhs) env
-        | Write (key, value) -> print_endline "Write";
+        (*| Write (key, value) -> print_endline "Write";
           let key = match Env.find record.env key with 
             | VString s -> s 
             | _ -> failwith "Type error!" in
           let lhs = LVar key in 
           let rhs = Env.find record.env value in
-          store lhs rhs env;
+          store lhs rhs env;*)
       end;
       loop ()
     | Cond (cond, bthen, belse) -> print_endline "Cond";
@@ -269,11 +270,11 @@ let exec (state : state) (program : program) (record : record) =
       end
     | Return expr -> print_endline "Return";
       record.continuation (eval env expr)
-    | Read -> print_endline "Read";
+    (*| Read -> print_endline "Read";
       let expr = match Env.find record.env "key" with
         | VString s -> EVar s
         | _ -> failwith "Type error!" in 
-      record.continuation(eval env expr)
+      record.continuation(eval env expr)*)
     | Pause next -> print_endline "Pause";
       record.pc <- next;
       state.records <- record::state.records
@@ -296,14 +297,14 @@ let schedule_record (state : state) (program : program): unit =
 
 (* Choose a client without a pending operation, create a new activation record
    to execute it, and append the invocation to the history *)
-let schedule_client (state : state) (program : program) (opIdx : int) (actuals : value list): unit =
+let schedule_client (state : state) (program : program) (func_name : string) (actuals : value list): unit =
   let rec pick n before after =
     match after with
     | [] -> raise Halt 
     | (c::cs) ->
       if n == 0 then begin
         let op =
-          List.nth program.client_ops opIdx
+          Env.find program.client_ops func_name
           (* List.nth program.client_ops (Random.int (List.length program.client_ops)) *)
         in
         let env = Env.create 91 in

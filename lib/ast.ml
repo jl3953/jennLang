@@ -23,8 +23,9 @@ type rhs =
 and param = Param of rhs 
 
 and default_value =
-  | Map of (default_value * default_value) list
+  (* | Map of (default_value * default_value) list *)
   | Options of option list
+  | EmptyMap
 
 and func_call = FuncCall of string * param list
 

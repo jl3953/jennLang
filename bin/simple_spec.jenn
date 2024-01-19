@@ -3,6 +3,7 @@ Node(Head) {
 
     func write(key, value) -> none {
         db[key] = value;
+        return true;
     }
 
     func read(key) -> int {
