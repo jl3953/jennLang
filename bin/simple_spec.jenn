@@ -1,0 +1,21 @@
+Node(Head) {
+    map<string, int> db = {};
+
+    func write(key, value) -> none {
+        db[key] = value;
+    }
+
+    func read(key) -> int {
+        return db[key];
+    }
+}
+
+ClientInterface {
+    func write(key, value) -> none {
+        rpc_call(Head, Write(key, value));
+    }
+
+    func read(key) -> int {
+        return rpc_call(Head, Read(key));
+    }
+}

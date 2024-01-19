@@ -28,6 +28,7 @@ type expr =
   | EFind of string * expr
   | EInt of int
   | EBool of bool
+  | EMap
 [@@deriving ord]
 
 type lhs =
@@ -38,7 +39,7 @@ type lhs =
 type instr =
   | Assign of lhs * expr (* jenndbg probably assigning map values? *)
   | Async of lhs * string * string * (expr list) (* jenndbg RPC*)
-  | Write (* jenndbg write a value *)
+  | Write of string * string (* jenndbg write a value *)
 [@@deriving ord]
 
 (* Static types *)
@@ -164,6 +165,9 @@ let rec eval (env : record_env) (expr : expr) : value =
       | VMap map -> Hashtbl.find map (eval env k)
       | _ -> failwith "Type error!"
     end
+  | EMap ->
+    let map = Hashtbl.create 91 in
+    VMap map
 
 let rec eval_lhs (env : record_env) (lhs : lhs) : lvalue =
   match lhs with
@@ -229,12 +233,12 @@ let exec (state : state) (program : program) (record : record) =
           end
         | Assign (lhs, rhs) -> print_endline "Assign";
           store lhs (eval env rhs) env
-        | Write -> print_endline "Write";
-          let key = match Env.find record.env "key" with 
+        | Write (key, value) -> print_endline "Write";
+          let key = match Env.find record.env key with 
             | VString s -> s 
             | _ -> failwith "Type error!" in
           let lhs = LVar key in 
-          let rhs = Env.find record.env "value" in
+          let rhs = Env.find record.env value in
           store lhs rhs env;
       end;
       loop ()
