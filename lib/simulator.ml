@@ -212,7 +212,8 @@ let exec (state : state) (program : program) (record : record) =
     | Instr (instr, next) -> print_endline "Instr";
       record.pc <- next;
       begin match instr with
-        | Async (lhs, node, func, actuals) -> print_endline "Async";
+        | Async (lhs, node, func, actuals) -> 
+          print_endline ("Async " ^ node);
           begin match load node env with
             | VNode node_id ->
               let new_future = ref None in
