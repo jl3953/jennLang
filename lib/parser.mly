@@ -183,16 +183,16 @@ right_side:
     { FieldAccessRHS(rhs, key) }
   | func_call = func_call
     { FuncCallRHS(func_call)}
-  | rpc_call = rpc_call
-    { RpcCallRHS(rpc_call) }
   | default_val = default_val
     { DefValRHS(default_val) }
 
   exp:
-  | left = left_side EQUALS right = right_side
+  | left = left_side EQUALS right = exp
     { Assignment(left, right)}
   | rhs = right_side  
     { RHS(rhs) }
+  | rpc_call = rpc_call
+    { RpcCallRHS(rpc_call) }
 
 statement:
   | cond_stmts = cond_stmts

@@ -25,7 +25,6 @@ let convertRHS(rhs: rhs) : Simulator.expr =
   | Bool(b) -> EBool(b)
   | VarRHS(var) -> EVar(var)
   | MapAccessRHS(map_name, key) -> EFind(map_name, EVar(key))
-  | RpcCallRHS(_) -> failwith "TODO I don't think RPC is supposed to be here"
   | FuncCallRHS(_) -> failwith "TODO didn't implement FuncCallRHS yet"
   | DefValRHS(_) -> failwith "TODO didn't implement DefValRHS yet"
   | FieldAccessRHS (_, _) -> failwith "TODO what on earth is FieldAccessRHS again?"
@@ -38,48 +37,44 @@ let rec generateCFGFromStmtList (stmts : statement list) (cfg : CFG.t) : CFG.ver
     | CondList (_) -> failwith "TODO implement CondList labels"
     | Return (expr) -> 
       begin match expr with
-      | RHS(rhs) ->
+      | RHS(rhs) -> CFG.create_vertex cfg (Return(convertRHS rhs))
+      | RpcCallRHS(rpc_call) ->
         let return_vertex = CFG.create_vertex cfg (Return(EVar "ret")) in
         let await_vertex = CFG.create_vertex cfg (Await(LVar "ret", EVar "async_future", return_vertex)) in
-        begin match rhs with
-        | RpcCallRHS(rpc_call) -> 
-          begin match rpc_call with
-          | RpcCall(node, func_call) -> 
-            begin match func_call with
-            | FuncCall(func_name, actuals) -> 
-              let actuals = List.map (fun actual -> 
-                match actual with Param(rhs) -> convertRHS rhs 
-                ) actuals 
-              in CFG.create_vertex cfg (Instr(Async(LVar("async_future"), node, func_name, actuals), await_vertex))
-            end
+        begin match rpc_call with
+        | RpcCall(node, func_call) -> 
+          begin match func_call with
+          | FuncCall(func_name, actuals) -> 
+            let actuals = List.map (fun actual -> 
+              match actual with Param(rhs) -> convertRHS rhs
+              ) actuals 
+            in CFG.create_vertex cfg (Instr(Async(LVar("async_future"), node, func_name, actuals), await_vertex))
           end
-        | _ -> CFG.create_vertex cfg (Return(convertRHS rhs))
         end
       | Assignment(_, _) -> failwith "Don't return an Assignment"
       end
     | Expr (expr) -> 
       let next = generateCFGFromStmtList rest cfg in
       begin match expr with 
-      | Assignment(lhs, rhs) -> 
-        begin match rhs with 
-        | RpcCallRHS(rpc_call) ->
-          begin match rpc_call with
-          | RpcCall(node, func_call) -> 
-            begin match func_call with
-            | FuncCall(func_name, actuals) -> 
-              let actuals = List.map (fun actual -> 
-                match actual with Param(rhs) -> convertRHS rhs
-              ) actuals in
-              CFG.create_vertex cfg (Instr(Async(convertLHS lhs, node, func_name, actuals), next))
-            end
-          end
-        | _ -> 
+      | Assignment(lhs, exp) -> 
+        begin match exp with
+        | RHS(rhs) -> 
           let next = generateCFGFromStmtList rest cfg in 
           CFG.create_vertex cfg (Instr(Assign(convertLHS lhs, convertRHS rhs), next))
+        | RpcCallRHS(rpc_call) ->
+            begin match rpc_call with
+            | RpcCall(node, func_call) -> 
+              begin match func_call with
+              | FuncCall(func_name, actuals) -> 
+                let actuals = List.map (fun actual -> 
+                  match actual with Param(rhs) -> convertRHS rhs
+                  ) actuals in
+                CFG.create_vertex cfg (Instr(Async(convertLHS lhs, node, func_name, actuals), next))
+              end
+            end
+        | Assignment(_, _) -> failwith "Don't assign an Assignment"
         end
-      | RHS(rhs) -> 
-        begin match rhs with
-        | RpcCallRHS(rpc_call) -> 
+      | RpcCallRHS(rpc_call) -> 
           begin match rpc_call with
           | RpcCall(node, func_call) -> 
             begin match func_call with
@@ -90,8 +85,7 @@ let rec generateCFGFromStmtList (stmts : statement list) (cfg : CFG.t) : CFG.ver
               CFG.create_vertex cfg (Instr(Async(LVar("ret"), node, func_name, actuals), next)) 
             end
           end
-        | _ -> failwith "TODO what else is there?"
-        end
+      | RHS(_) -> failwith "No standalone RHS"
       end
     end
     

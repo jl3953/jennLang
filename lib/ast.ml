@@ -15,7 +15,6 @@ type rhs =
   | Bool of bool
   | VarRHS of string
   | MapAccessRHS of string * string
-  | RpcCallRHS of rpc_call
   | FuncCallRHS of func_call
   | DefValRHS of default_value
   | FieldAccessRHS of rhs * string
@@ -37,8 +36,9 @@ and lhs =
   | FieldAccessLHS of rhs * string
 
 and expr =
-  | Assignment of lhs * rhs
+  | Assignment of lhs * expr
   | RHS of rhs 
+  | RpcCallRHS of rpc_call
 
 
 type cond_stmt = IfElseIf of rhs * statement list 
