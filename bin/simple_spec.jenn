@@ -1,22 +1,22 @@
 Node(Head) {
     map<string, int> db = {};
 
-    func write(key, value) -> none {
+    func Write(key, value) -> none {
         db[key] = value;
         return true;
     }
 
-    func read(key) -> int {
+    func Read(key) -> int {
         return db[key];
     }
 }
 
 ClientInterface {
-    func write(key, value) -> none {
-        rpc_call(Head, Write(key, value));
+    func write(dest, key, value) -> none {
+        rpc_call(dest, Write(key, value));
     }
 
-    func read(key) -> int {
-        return rpc_call(Head, Read(key));
+    func read(dest, key) -> int {
+        return rpc_call(dest, Read(key));
     }
 }

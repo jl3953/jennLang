@@ -151,7 +151,6 @@ type program =
   ; client_ops : function_info Env.t }(* jenndbg why does an RPC handler need a list of function info *)
 
 let load (var : string) (env : record_env) : value =
-  print_endline ("Loading " ^ var);
   try Env.find env.local_env var
   with Not_found -> Env.find env.node_env var
 
@@ -199,7 +198,7 @@ let store (lhs : lhs) (vl : value) (env : record_env) : unit =
 
 exception Halt
 
-let function_info name program = Env.find program.rpc name
+let function_info name program = print_endline ("rpc name: " ^ name); Env.find program.rpc name
 
 (* Execute record until pause/return.  Invariant: record does *not* belong to
    state.records *)
@@ -212,8 +211,7 @@ let exec (state : state) (program : program) (record : record) =
     | Instr (instr, next) -> print_endline "Instr";
       record.pc <- next;
       begin match instr with
-        | Async (lhs, node, func, actuals) -> 
-          print_endline ("Async " ^ node);
+        | Async (lhs, node, func, actuals) -> print_endline "\tAsync";
           begin match load node env with
             | VNode node_id ->
               let new_future = ref None in
@@ -229,11 +227,13 @@ let exec (state : state) (program : program) (record : record) =
                 ; continuation = (fun value -> new_future := Some value)
                 ; env = new_env }
               in
-              store lhs (VFuture new_future) env;
-              state.records <- new_record::state.records
+              store lhs (VFuture new_future) env
+              ; state.records <- new_record::state.records
+              (* ; print_int (List.length state.records)
+              ; print_endline " add future to records" *)
             | _ -> failwith "Type error!"
           end
-        | Assign (lhs, rhs) -> print_endline "Assign";
+        | Assign (lhs, rhs) -> print_endline "\tAssign";
           store lhs (eval env rhs) env
         (*| Write (key, value) -> print_endline "Write";
           let key = match Env.find record.env key with 
@@ -253,15 +253,22 @@ let exec (state : state) (program : program) (record : record) =
         | _ -> failwith "Type error!"
       end;
       loop ()
-    | Await (lhs, expr, next) -> print_endline "Await";
-      begin match eval env expr with
-        | VFuture fut ->
+    | Await (lhs, expr, next) -> print_endline "Await"
+      ; begin match expr with 
+      | EVar v -> print_endline ("EVar " ^ v)
+      | EInt i -> print_endline ("EInt " ^ string_of_int i)
+      | EBool b -> print_endline ("EBool " ^ string_of_bool b)
+      | EFind (_, _) -> print_endline "EFind"
+      | EMap -> print_endline "EMap"
+      end
+      ; begin match eval env expr with
+        | VFuture fut -> print_endline "\tVFuture";
           begin match !fut with
-            | Some value ->
+            | Some value -> print_endline "\t\tSome";
               record.pc <- next;
               store lhs value env;
               loop ()
-            | None ->
+            | None -> print_endline "\t\tNone";
               (* Still waiting.  TODO: should keep blocked records in a
                  different data structure to avoid scheduling records that
                  can't do any work. *)
@@ -270,6 +277,20 @@ let exec (state : state) (program : program) (record : record) =
         | _ -> failwith "Type error!"
       end
     | Return expr -> print_endline "Return";
+      begin match expr with
+      | EVar v -> print_endline ("\tEVar " ^ v)
+      | EInt i -> print_endline ("\tEInt " ^ string_of_int i)
+      | EBool b -> print_endline ("\tEBool " ^ string_of_bool b)
+      | EFind (m, k) -> 
+        begin match k with
+        | EVar v -> print_endline ("\tEFind " ^ m ^ ", " ^ v)
+        | EInt i -> print_endline ("\tEFind " ^ m ^ ", " ^ string_of_int i)
+        | EBool b -> print_endline ("\tEFind " ^ m ^ ", " ^ string_of_bool b)
+        | EMap -> print_endline ("\tEFind " ^ m ^ ", EMap")
+        | EFind (_, _) -> print_endline ("\tEFind " ^ m ^ ", EFind ")
+        end
+      | EMap -> print_endline ("\tEMap");
+      end;
       record.continuation (eval env expr)
     (*| Read -> print_endline "Read";
       let expr = match Env.find record.env "key" with
@@ -284,9 +305,11 @@ let exec (state : state) (program : program) (record : record) =
   loop ()
 
 let schedule_record (state : state) (program : program): unit =
+  print_int (List.length state.records);
+  print_endline " scheduling records left";
   let rec pick n before after =
     match after with
-    | [] -> raise Halt
+    | [] -> print_endline "Halt"; raise Halt
     | (r::rs) -> 
       if n == 0 then begin
         state.records <- List.rev_append before rs;
@@ -295,6 +318,7 @@ let schedule_record (state : state) (program : program): unit =
         pick (n-1) (r::before) rs
   in
   pick (Random.int (List.length state.records)) [] state.records
+  (* pick 0 [] state.records *)
 
 (* Choose a client without a pending operation, create a new activation record
    to execute it, and append the invocation to the history *)
@@ -310,9 +334,8 @@ let schedule_client (state : state) (program : program) (func_name : string) (ac
         in
         let env = Env.create 91 in
           List.iter2 (fun (formal, _) actual ->
-              Env.add env formal actual)
-            op.formals
-            actuals;
+              Env.add env formal actual
+          ) op.formals actuals;
         (* let params =
           List.map (fun (formal, _) ->
               (* TODO: generate random parameters *)

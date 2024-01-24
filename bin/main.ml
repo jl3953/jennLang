@@ -39,7 +39,8 @@ let rec generateCFGFromStmtList (stmts : statement list) (cfg : CFG.t) : CFG.ver
     | Return (expr) -> 
       begin match expr with
       | RHS(rhs) ->
-        let return_vertex = CFG.create_vertex cfg (Return(EVar "ret")) in 
+        let return_vertex = CFG.create_vertex cfg (Return(EVar "ret")) in
+        let await_vertex = CFG.create_vertex cfg (Await(LVar "ret", EVar "async_future", return_vertex)) in
         begin match rhs with
         | RpcCallRHS(rpc_call) -> 
           begin match rpc_call with
@@ -49,7 +50,7 @@ let rec generateCFGFromStmtList (stmts : statement list) (cfg : CFG.t) : CFG.ver
               let actuals = List.map (fun actual -> 
                 match actual with Param(rhs) -> convertRHS rhs 
                 ) actuals 
-              in CFG.create_vertex cfg (Instr(Async(LVar("ret"), node, func_name, actuals), return_vertex))
+              in CFG.create_vertex cfg (Instr(Async(LVar("async_future"), node, func_name, actuals), await_vertex))
             end
           end
         | _ -> CFG.create_vertex cfg (Return(convertRHS rhs))
@@ -72,7 +73,9 @@ let rec generateCFGFromStmtList (stmts : statement list) (cfg : CFG.t) : CFG.ver
               CFG.create_vertex cfg (Instr(Async(convertLHS lhs, node, func_name, actuals), next))
             end
           end
-        | _ -> CFG.create_vertex cfg (Instr(Assign(convertLHS lhs, convertRHS rhs), next))
+        | _ -> 
+          let next = generateCFGFromStmtList rest cfg in 
+          CFG.create_vertex cfg (Instr(Assign(convertLHS lhs, convertRHS rhs), next))
         end
       | RHS(rhs) -> 
         begin match rhs with
@@ -141,7 +144,7 @@ let processRoles (roles : role_def list) (cfg : CFG.t) : function_info list =
 let processClientIntf (clientIntf : client_def) (cfg: CFG.t) : function_info list =
   match clientIntf with
   | ClientDef(func_defs) -> 
-    List.map (fun func_def -> processFuncDef func_def cfg "client") func_defs
+    List.map (fun func_def -> processFuncDef func_def cfg "") func_defs
 
 
 let processProgram (prog : prog) : program =
@@ -153,9 +156,9 @@ let processProgram (prog : prog) : program =
     let role_func_infos = processRoles roles cfg in
     let client_func_infos = processClientIntf clientIntf cfg in
     let func_infos = role_func_infos @ client_func_infos in
-    let _ = List.iter (fun func_info -> Env.add rpcCalls func_info.name func_info) func_infos in
-    (* List.iter (fun func_info -> Env.add clientCalls func_info.name func_info) ((Env.find rpcCalls "init")::client_func_infos); *)
-    List.iter (fun func_info -> Env.add clientCalls func_info.name func_info) func_infos;
+    let _ = List.iter (fun func_info -> print_endline ("add to rpcnames " ^ func_info.name);Env.add rpcCalls func_info.name func_info) func_infos in
+    List.iter (fun func_info -> Env.add clientCalls func_info.name func_info) ((Env.find rpcCalls "init")::client_func_infos);
+    (* List.iter (fun func_info -> Env.add clientCalls func_info.name func_info) func_infos; *)
     let myProgram = 
       { cfg = cfg
       ; rpc = rpcCalls
@@ -176,14 +179,19 @@ let interp (f : string) : unit =
   schedule_record globalState myProgram;
   print_endline "...executed init";
   print_endline "attempt to execute write...";
-  schedule_client globalState myProgram "write" [VString "birthday"; VInt 214];
-  schedule_record globalState myProgram;
+  schedule_client globalState myProgram "write" [VNode 0; VString "birthday"; VInt 214];
+  while not (List.is_empty globalState.records) do
+    schedule_record globalState myProgram;
+  done;
   print_endline "...executed write";
-  print_endline "read";
-  schedule_client globalState myProgram "read" [VString "birthday"];
-  schedule_record globalState myProgram;
+  print_endline "attempt to execute read...";
+  schedule_client globalState myProgram "read" [VNode 0; VString "birthday"];
+  while not (List.is_empty globalState.records) do
+    schedule_record globalState myProgram;
+  done;
+  print_endline "...executed read";
   let oc = open_out "output.csv" in
-  Printf.fprintf oc "ClientID,Kind,Action,Payload,Value\n";
+  Printf.fprintf oc "ClientID,Kind,Action,Server,Payload,Value\n";
   DA.iter (fun op -> 
     Printf.fprintf oc "%d," op.client_id
     (* print_string op.op_action *)
@@ -202,6 +210,8 @@ let interp (f : string) : unit =
       | VBool b -> Printf.fprintf oc "%s," (string_of_bool b)
       (* | VMap m -> print_string (string_of_map m) *)
       | VString s -> Printf.fprintf oc "%s," s
+      | VNode n -> Printf.fprintf oc "%d," n
+      | VFuture _ -> Printf.fprintf oc "TODO implement VFuture"
       | _ -> failwith "Type error!") 
       op.payload
     (* ; print_endline "")  *)
