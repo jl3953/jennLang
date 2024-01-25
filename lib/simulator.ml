@@ -154,12 +154,12 @@ type program =
 let load (var : string) (env : record_env) : value =
   try begin 
     let v = Env.find env.local_env var in 
-    let _ = print_endline ("Found local " ^ var) in
+    (* let _ = print_endline ("Found local " ^ var) in *)
     v
   end
   with Not_found -> begin 
     let v = Env.find env.node_env var in
-    let _ = print_endline ("Found node " ^ var) in 
+    (* let _ = print_endline ("Found node " ^ var) in  *)
     v
   end
 
@@ -174,10 +174,13 @@ let rec eval (env : record_env) (expr : expr) : value =
       | VMap map -> Hashtbl.find map (eval env k)
       | _ -> failwith "Type error!"
     end
-  | EMap -> print_endline "EMap";
+  | EMap -> 
+    (* print_endline "EMap"; *)
     let map = Hashtbl.create 91 in
     VMap map
-  | EString s -> print_endline ("VString " ^ s); VString s
+  | EString s -> 
+    (* print_endline ("VString " ^ s);  *)
+    VString s
 
 let rec eval_lhs (env : record_env) (lhs : lhs) : lvalue =
   match lhs with
@@ -200,12 +203,12 @@ let store (lhs : lhs) (vl : value) (env : record_env) : unit =
   match eval_lhs env lhs with
   | LVVar var -> 
     if Env.mem env.local_env var then begin
-      print_endline ("Replacing local " ^ var);
+      (* print_endline ("Replacing local " ^ var); *)
       Env.replace env.local_env var vl
     end
     else
       begin
-        print_endline ("Replacing node " ^ var);
+        (* print_endline ("Replacing node " ^ var); *)
         Env.replace env.node_env var vl
       end
   | LVAccess (key, table) ->
@@ -213,7 +216,9 @@ let store (lhs : lhs) (vl : value) (env : record_env) : unit =
 
 exception Halt
 
-let function_info name program = print_endline ("rpc name: " ^ name); Env.find program.rpc name
+let function_info name program = 
+  (* print_endline ("rpc name: " ^ name);  *)
+  Env.find program.rpc name
 
 (* Execute record until pause/return.  Invariant: record does *not* belong to
    state.records *)
@@ -223,7 +228,8 @@ let exec (state : state) (program : program) (record : record) =
   in
   let rec loop () =
     match CFG.label program.cfg record.pc with
-    | Instr (instr, next) -> print_endline "Instr";
+    | Instr (instr, next) -> 
+      print_endline "Instr";
       record.pc <- next;
       begin match instr with
         | Async (lhs, node, func, actuals) -> 
@@ -231,6 +237,7 @@ let exec (state : state) (program : program) (record : record) =
           | EVar v -> v
           | EString s -> s
           | _ -> failwith "Type error!" in
+          let () = print_endline ("\tAsync " ^ roleName) in 
           (* let node = 
             begin match (eval env nodeVar) with
             | VString s -> s
@@ -285,11 +292,13 @@ let exec (state : state) (program : program) (record : record) =
               | _ -> failwith "Type error!"
               end
           end
-        | Assign (lhs, rhs) -> print_endline ("\tAssign executing on node " ^ string_of_int record.node);
+        | Assign (lhs, rhs) -> 
+          print_endline ("\tAssign executing on node " ^ string_of_int record.node);
           store lhs (eval env rhs) env
       end;
       loop ()
-    | Cond (cond, bthen, belse) -> print_endline "Cond";
+    | Cond (cond, bthen, belse) -> 
+      (* print_endline "Cond"; *)
       begin match eval env cond with
         | VBool true ->
           record.pc <- bthen
@@ -298,23 +307,27 @@ let exec (state : state) (program : program) (record : record) =
         | _ -> failwith "Type error!"
       end;
       loop ()
-    | Await (lhs, expr, next) -> print_endline "Await"
-      ; begin match expr with 
+    | Await (lhs, expr, next) -> 
+      print_endline "Await"; 
+      (* begin match expr with 
       | EVar v -> print_endline ("EVar " ^ v)
       | EInt i -> print_endline ("EInt " ^ string_of_int i)
       | EBool b -> print_endline ("EBool " ^ string_of_bool b)
       | EFind (_, _) -> print_endline "EFind"
       | EMap -> print_endline "EMap"
       | EString s -> print_endline ("EString " ^ s)
-      end
-      ; begin match eval env expr with
-        | VFuture fut -> print_endline "\tVFuture";
+      end;  *)
+      begin match eval env expr with
+        | VFuture fut -> 
+          print_endline "\tVFuture";
           begin match !fut with
-            | Some value -> print_endline "\t\tSome";
+            | Some value -> 
+              print_endline "\t\tSome";
               record.pc <- next;
               store lhs value env;
               loop ()
-            | None -> print_endline "\t\tNone";
+            | None -> 
+              print_endline "\t\tNone";
               (* Still waiting.  TODO: should keep blocked records in a
                  different data structure to avoid scheduling records that
                  can't do any work. *)
@@ -322,8 +335,9 @@ let exec (state : state) (program : program) (record : record) =
           end
         | _ -> failwith "Type error!"
       end
-    | Return expr -> print_endline "Return";
-      begin match expr with
+    | Return expr -> 
+      print_endline "Return";
+      (* begin match expr with
       | EVar v -> print_endline ("\tEVar " ^ v)
       | EInt i -> print_endline ("\tEInt " ^ string_of_int i)
       | EBool b -> print_endline ("\tEBool " ^ string_of_bool b)
@@ -338,14 +352,15 @@ let exec (state : state) (program : program) (record : record) =
         end
       | EMap -> print_endline ("\tEMap");
       | EString s -> print_endline ("\tEString " ^ s)
-      end;
+      end; *)
       record.continuation (eval env expr)
     (*| Read -> print_endline "Read";
       let expr = match Env.find record.env "key" with
         | VString s -> EVar s
         | _ -> failwith "Type error!" in 
       record.continuation(eval env expr)*)
-    | Pause next -> print_endline "Pause";
+    | Pause next -> 
+      (* print_endline "Pause"; *)
       record.pc <- next;
       state.records <- record::state.records
 

@@ -76,7 +76,9 @@ let rec generateCFGFromStmtList (stmts : statement list) (cfg : CFG.t) : CFG.ver
                 let actuals = List.map (fun actual -> 
                   match actual with Param(rhs) -> convertRHS rhs
                   ) actuals in
-                CFG.create_vertex cfg (Instr(Async(convertLHS lhs, EVar node, func_name, actuals), next))
+                let assign_vert = CFG.create_vertex cfg (Instr(Assign(convertLHS lhs, EVar "dontcare"), next)) in
+                let await_vertex = CFG.create_vertex cfg (Await(LVar("dontcare"), EVar "async_future", assign_vert)) in
+                CFG.create_vertex cfg (Instr(Async(LVar("async_future"), EVar node, func_name, actuals), await_vertex))
               end
             end
         | Assignment(_, _) -> failwith "Don't assign an Assignment"
@@ -89,7 +91,8 @@ let rec generateCFGFromStmtList (stmts : statement list) (cfg : CFG.t) : CFG.ver
               let actuals = List.map (fun actual -> 
                 match actual with Param(rhs) -> convertRHS rhs
               ) actuals in
-              CFG.create_vertex cfg (Instr(Async(LVar("ret"), EVar node, func_name, actuals), next)) 
+              let await_vert = CFG.create_vertex cfg (Await(LVar("dontcare"), EVar "async_future", next)) in
+              CFG.create_vertex cfg (Instr(Async(LVar("async_future"), EVar node, func_name, actuals), await_vert)) 
             end
           end
       | RHS(_) -> failwith "No standalone RHS"
@@ -185,7 +188,9 @@ let processProgram (prog : prog) : program =
     let role_func_infos = processRoles roles cfg in
     let client_func_infos = processClientIntf clientIntf cfg in
     let func_infos = role_func_infos @ client_func_infos in
-    let _ = List.iter (fun func_info -> print_endline ("add to rpcnames " ^ func_info.name);Env.add rpcCalls func_info.name func_info) func_infos in
+    let _ = List.iter (fun func_info ->
+       Env.add rpcCalls func_info.name func_info
+       ) func_infos in
     for i = 0 to (List.length roles) - 1 do
       let init_funcname = "init_" ^ (List.nth roleNames i) in
       Env.add clientCalls init_funcname (Env.find rpcCalls init_funcname)
@@ -253,7 +258,8 @@ let interp (f : string) : unit =
       op.payload
     ; Printf.fprintf oc "\n"
     ) globalState.history;
-    print_global_nodes globalState.nodes;;
+    print_global_nodes globalState.nodes;
+  ;;
 
 (* When changing config, remember to:
 1. change roleNames variable
