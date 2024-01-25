@@ -51,7 +51,11 @@ let rec generateCFGFromStmtList (stmts : statement list) (cfg : CFG.t) : CFG.ver
             let actuals = List.map (fun actual -> 
               match actual with Param(rhs) -> convertRHS rhs
               ) actuals 
-            in CFG.create_vertex cfg (Instr(Async(LVar("async_future"), node, func_name, actuals), await_vertex))
+            (* in begin match node with 
+            | EVar n -> CFG.create_vertex cfg (Instr(Async(LVar("async_future"), n, func_name, actuals), await_vertex))
+            | _ -> CFG.create_vertex cfg (Instr(Async(LVar("async_future"), (EVar node), func_name, actuals), await_vertex))
+            end *)
+            in CFG.create_vertex cfg (Instr(Async(LVar("async_future"), (EVar node), func_name, actuals), await_vertex))
           end
         end
       | Assignment(_, _) -> failwith "Don't return an Assignment"
@@ -72,7 +76,7 @@ let rec generateCFGFromStmtList (stmts : statement list) (cfg : CFG.t) : CFG.ver
                 let actuals = List.map (fun actual -> 
                   match actual with Param(rhs) -> convertRHS rhs
                   ) actuals in
-                CFG.create_vertex cfg (Instr(Async(convertLHS lhs, node, func_name, actuals), next))
+                CFG.create_vertex cfg (Instr(Async(convertLHS lhs, EVar node, func_name, actuals), next))
               end
             end
         | Assignment(_, _) -> failwith "Don't assign an Assignment"
@@ -85,7 +89,7 @@ let rec generateCFGFromStmtList (stmts : statement list) (cfg : CFG.t) : CFG.ver
               let actuals = List.map (fun actual -> 
                 match actual with Param(rhs) -> convertRHS rhs
               ) actuals in
-              CFG.create_vertex cfg (Instr(Async(LVar("ret"), node, func_name, actuals), next)) 
+              CFG.create_vertex cfg (Instr(Async(LVar("ret"), EVar node, func_name, actuals), next)) 
             end
           end
       | RHS(_) -> failwith "No standalone RHS"
@@ -137,7 +141,7 @@ let processRoleDef (role_def : role_def) (cfg : CFG.t) : function_info list =
     let init_func_info =
       let ret_vert = CFG.create_vertex cfg (Return(EBool true)) in
       let await_vert = CFG.create_vertex cfg (Await(LVar("dontcare"), EVar("dontcare"), ret_vert)) in
-      let async_label = Instr(Async(LVar("dontcare"), role_name, "init_on", []), await_vert) in
+      let async_label = Instr(Async(LVar("dontcare"), EVar role_name, "init_on", []), await_vert) in
       let async_vert = CFG.create_vertex cfg async_label in
       { entry = async_vert
     ; name = "init_" ^ role_name
@@ -251,6 +255,11 @@ let interp (f : string) : unit =
     ) globalState.history;
     print_global_nodes globalState.nodes;;
 
-interp "/Users/jenniferlam/jennLang/bin/simple_spec.jenn"
+(* When changing config, remember to:
+1. change roleNames variable
+2. change the number of nodes in global state
+3. change the client idx
+*)
+interp "/Users/jenniferlam/jennLang/bin/CR.jenn"
 let () = print_endline "Program recognized as valid!"
 let () = print_endline "Program ran successfully!"

@@ -226,18 +226,26 @@ let exec (state : state) (program : program) (record : record) =
     | Instr (instr, next) -> print_endline "Instr";
       record.pc <- next;
       begin match instr with
-        | Async (lhs, nodeVar, func, actuals) -> 
-          let node = 
+        | Async (lhs, node, func, actuals) -> 
+          let roleName = match node with 
+          | EVar v -> v
+          | EString s -> s
+          | _ -> failwith "Type error!" in
+          (* let node = 
             begin match (eval env nodeVar) with
             | VString s -> s
-            | VMap m -> failwith "Implement nested "
-            | _ -> failwith "Type error!" 
-            end in
-          print_endline ("\tAsync node " ^ node);
-          begin match load node env with
+            | VBool _ -> failwith "Type error bool"
+            | VInt _ -> failwith "Type error int"
+            | VMap _ -> failwith "Type error map"
+            | VOption _ -> failwith "Type error option"
+            | VFuture _ -> failwith "Type error future"
+            | VNode _ -> failwith "Type error node"
+            end in *)
+          (* print_endline ("\tAsync node " ^ node); *)
+          begin match eval env node with
             | VNode node_id ->
               let new_future = ref None in
-              let { entry; formals; _ } = function_info (func ^ "_" ^ node) program in
+              let { entry; formals; _ } = function_info (func ^ "_" ^ roleName) program in
               let new_env = Env.create 91 in
               List.iter2 (fun (formal, _) actual ->
                   Env.add new_env formal (eval env actual))
@@ -251,7 +259,31 @@ let exec (state : state) (program : program) (record : record) =
               in
               store lhs (VFuture new_future) env
               ; state.records <- new_record::state.records
-            | _ -> failwith "Type error!"
+            | VBool _ -> failwith "Type error bool"
+            | VInt _ -> failwith "Type error int"
+            | VMap _ -> failwith "Type error map"
+            | VOption _ -> failwith "Type error option"
+            | VFuture _ -> failwith "Type error future"
+            | VString role -> 
+              begin match load role env with 
+              | VNode node_id ->
+                let new_future = ref None in
+                let { entry; formals; _ } = function_info (func ^ "_" ^ role) program in
+                let new_env = Env.create 91 in
+                List.iter2 (fun (formal, _) actual ->
+                    Env.add new_env formal (eval env actual))
+                  formals
+                  actuals;
+                let new_record =
+                  { node = node_id
+                  ; pc = entry
+                  ; continuation = (fun value -> new_future := Some value)
+                  ; env = new_env }
+                in
+                store lhs (VFuture new_future) env
+                ; state.records <- new_record::state.records
+              | _ -> failwith "Type error!"
+              end
           end
         | Assign (lhs, rhs) -> print_endline ("\tAssign executing on node " ^ string_of_int record.node);
           store lhs (eval env rhs) env
