@@ -1,19 +1,14 @@
 Head {
     map<string, int> db = {};
-    string role = "Head";
-    Node successor = "Mid";
 
     func Write(key, value) -> none {
         db[key] = value;
-        rpc_call("Mid", Write(key, value));
+        return rpc_call("Mid", Write(key, value));
     }
 }
 
 Mid {
     map<string, int> db = {};
-    string role = "Mid";
-    Node predecessor = "Head";
-    Node successor = "Tail";
 
     func Write(key, value) -> none {
         db[key] = value;
@@ -25,7 +20,6 @@ Tail {
 
     map<string, int> db = {};
     string role = "Tail";
-    Node predecessor = "Mid";
 
     func Write(key, value) -> none {
         db[key] = value;

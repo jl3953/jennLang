@@ -21,6 +21,7 @@
 %token RETURN
 %token RPC_CALL
 %token SEMICOLON
+%token QUOTE
 %token EOF
 
 %type <Ast.prog> program
@@ -115,6 +116,8 @@ cond_stmts:
 rpc_call:
   | RPC_CALL LEFT_PAREN host = ID COMMA func_call = func_call RIGHT_PAREN
     { RpcCall(host, func_call) }
+  | RPC_CALL LEFT_PAREN QUOTE host = ID QUOTE COMMA func_call = func_call RIGHT_PAREN
+    { RpcCall(host, func_call) }
 
 type_def:
   | id = ID
@@ -133,6 +136,8 @@ default_val:
     { EmptyMap }
   | OPTIONS LEFT_PAREN opts = options RIGHT_PAREN
     { Options(opts) }
+  | QUOTE s = ID QUOTE
+    { String(s) }
 
 var_init:
   | typ = type_def id = ID EQUALS default = default_val

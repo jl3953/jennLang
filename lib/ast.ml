@@ -25,6 +25,7 @@ and default_value =
   (* | Map of (default_value * default_value) list *)
   | Options of option list
   | EmptyMap
+  | String of string
 
 and func_call = FuncCall of string * param list
 

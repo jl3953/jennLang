@@ -29,6 +29,7 @@ type expr =
   | EInt of int
   | EBool of bool
   | EMap
+  | EString of string
 [@@deriving ord]
 
 type lhs =
@@ -151,8 +152,16 @@ type program =
   ; client_ops : function_info Env.t }(* jenndbg why does an RPC handler need a list of function info *)
 
 let load (var : string) (env : record_env) : value =
-  try Env.find env.local_env var
-  with Not_found -> Env.find env.node_env var
+  try begin 
+    let v = Env.find env.local_env var in 
+    let _ = print_endline ("Found local " ^ var) in
+    v
+  end
+  with Not_found -> begin 
+    let v = Env.find env.node_env var in
+    let _ = print_endline ("Found node " ^ var) in 
+    v
+  end
 
 (* Evaluate an expression in the context of an environment. *)
 let rec eval (env : record_env) (expr : expr) : value =
@@ -165,9 +174,10 @@ let rec eval (env : record_env) (expr : expr) : value =
       | VMap map -> Hashtbl.find map (eval env k)
       | _ -> failwith "Type error!"
     end
-  | EMap ->
+  | EMap -> print_endline "EMap";
     let map = Hashtbl.create 91 in
     VMap map
+  | EString s -> print_endline ("VString " ^ s); VString s
 
 let rec eval_lhs (env : record_env) (lhs : lhs) : lvalue =
   match lhs with
@@ -189,10 +199,15 @@ let rec eval_lhs (env : record_env) (lhs : lhs) : lvalue =
 let store (lhs : lhs) (vl : value) (env : record_env) : unit =
   match eval_lhs env lhs with
   | LVVar var -> 
-    if Env.mem env.local_env var then
+    if Env.mem env.local_env var then begin
+      print_endline ("Replacing local " ^ var);
       Env.replace env.local_env var vl
+    end
     else
-      Env.replace env.node_env var vl
+      begin
+        print_endline ("Replacing node " ^ var);
+        Env.replace env.node_env var vl
+      end
   | LVAccess (key, table) ->
     Hashtbl.add table key vl
 
@@ -211,11 +226,12 @@ let exec (state : state) (program : program) (record : record) =
     | Instr (instr, next) -> print_endline "Instr";
       record.pc <- next;
       begin match instr with
-        | Async (lhs, node, func, actuals) -> print_endline "\tAsync";
+        | Async (lhs, node, func, actuals) -> 
+          print_endline ("\tAsync node " ^ node);
           begin match load node env with
             | VNode node_id ->
               let new_future = ref None in
-              let { entry; formals; _ } = function_info func program in
+              let { entry; formals; _ } = function_info (func ^ "_" ^ node) program in
               let new_env = Env.create 91 in
               List.iter2 (fun (formal, _) actual ->
                   Env.add new_env formal (eval env actual))
@@ -229,19 +245,10 @@ let exec (state : state) (program : program) (record : record) =
               in
               store lhs (VFuture new_future) env
               ; state.records <- new_record::state.records
-              (* ; print_int (List.length state.records)
-              ; print_endline " add future to records" *)
             | _ -> failwith "Type error!"
           end
-        | Assign (lhs, rhs) -> print_endline "\tAssign";
+        | Assign (lhs, rhs) -> print_endline ("\tAssign executing on node " ^ string_of_int record.node);
           store lhs (eval env rhs) env
-        (*| Write (key, value) -> print_endline "Write";
-          let key = match Env.find record.env key with 
-            | VString s -> s 
-            | _ -> failwith "Type error!" in
-          let lhs = LVar key in 
-          let rhs = Env.find record.env value in
-          store lhs rhs env;*)
       end;
       loop ()
     | Cond (cond, bthen, belse) -> print_endline "Cond";
@@ -260,6 +267,7 @@ let exec (state : state) (program : program) (record : record) =
       | EBool b -> print_endline ("EBool " ^ string_of_bool b)
       | EFind (_, _) -> print_endline "EFind"
       | EMap -> print_endline "EMap"
+      | EString s -> print_endline ("EString " ^ s)
       end
       ; begin match eval env expr with
         | VFuture fut -> print_endline "\tVFuture";
@@ -288,8 +296,10 @@ let exec (state : state) (program : program) (record : record) =
         | EBool b -> print_endline ("\tEFind " ^ m ^ ", " ^ string_of_bool b)
         | EMap -> print_endline ("\tEFind " ^ m ^ ", EMap")
         | EFind (_, _) -> print_endline ("\tEFind " ^ m ^ ", EFind ")
+        | EString s -> print_endline ("\tEString " ^ s)
         end
       | EMap -> print_endline ("\tEMap");
+      | EString s -> print_endline ("\tEString " ^ s)
       end;
       record.continuation (eval env expr)
     (*| Read -> print_endline "Read";

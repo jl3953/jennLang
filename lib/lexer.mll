@@ -54,6 +54,7 @@ rule token = parse
   | ']' {RIGHT_SQUARE_BRACKET}
   | '.' {DOT}
   | ';' {SEMICOLON}
+  | '"' {QUOTE}
   | "true" { TRUE true }
   | "false" { FALSE false }
   | "func" { FUNC }

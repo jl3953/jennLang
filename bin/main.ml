@@ -2,17 +2,20 @@ open Mylib.Ast
 open Mylib
 open Mylib.Simulator
 
-(* let parse (s : string) : prog =
-  let lexbuf = Lexing.from_string s in
-  let ast = Parser.program Lexer.token lexbuf in
-  ast *)
-
 let parse_file (filename : string) : prog =
   let ic = open_in filename in
   let lexbuf = Lexing.from_channel ic in
   let ast = Parser.program Lexer.token lexbuf in
   close_in ic;
   ast
+
+let roleNames = ["Head"; "Mid"; "Tail"]
+let topology_config = Env.create (List.length roleNames)
+let () = for i = 0 to (List.length roleNames) - 1 do
+  Env.add topology_config (List.nth roleNames i) i
+done
+let topology_config (role : string) : Simulator.value = 
+  VNode (Env.find topology_config role)
 
 let convertLHS(lhs : Ast.lhs) : Simulator.lhs =
   match lhs with 
@@ -108,29 +111,40 @@ let processFuncDef (func_def : func_def) (cfg : CFG.t) (suffix : string) : funct
       ; locals = [] }
     end
   
-let rec processInits (inits : var_init list) (cfg : CFG.t): CFG.vertex = 
+let rec processInits (inits : var_init list) (cfg : CFG.t)  : CFG.vertex = 
   match inits with
   | [] -> CFG.create_vertex cfg (Return(EBool true))
   | init::rest -> 
-    let next = processInits rest cfg in
+    let next = processInits rest cfg  in
     let label = match init with VarInit(_, var_name, default_value) -> 
       begin match default_value with 
         | EmptyMap -> Instr(Assign(LVar(var_name), EMap), next)
+        | String var -> Instr(Assign(LVar(var_name), EString(var)), next)
         | Options _ -> failwith "TODO implement Options"
       end
     in CFG.create_vertex cfg label
 
 let processRoleDef (role_def : role_def) (cfg : CFG.t) : function_info list =
   match role_def with 
-  | RoleDef(_, _, inits, func_defs) ->
-    let init_func_info = 
-      let init_vertex = processInits inits cfg in 
+  | RoleDef(role_name, _, inits, func_defs) ->
+    let init_on_func_info = 
+      let func_name = "init_on_" ^ role_name in
+      let init_vertex = processInits inits cfg in
       { entry = init_vertex
-      ; name = "init"
+      ; name = func_name
       ; formals = []
-      ; locals = [] }
-    and func_infos = List.map (fun func_def -> processFuncDef func_def cfg "") func_defs
-    in init_func_info :: func_infos
+      ; locals = [] } in
+    let init_func_info =
+      let ret_vert = CFG.create_vertex cfg (Return(EBool true)) in
+      let await_vert = CFG.create_vertex cfg (Await(LVar("dontcare"), EVar("dontcare"), ret_vert)) in
+      let async_label = Instr(Async(LVar("dontcare"), role_name, "init_on", []), await_vert) in
+      let async_vert = CFG.create_vertex cfg async_label in
+      { entry = async_vert
+    ; name = "init_" ^ role_name
+    ; formals = []
+    ; locals = []} in
+    let func_infos = List.map (fun func_def -> processFuncDef func_def cfg ("_" ^ role_name)) func_defs
+    in init_func_info :: init_on_func_info :: func_infos
 
 let processRoles (roles : role_def list) (cfg : CFG.t) : function_info list =
   List.concat (List.map (fun role_def -> processRoleDef role_def cfg) roles)
@@ -138,8 +152,25 @@ let processRoles (roles : role_def list) (cfg : CFG.t) : function_info list =
 let processClientIntf (clientIntf : client_def) (cfg: CFG.t) : function_info list =
   match clientIntf with
   | ClientDef(func_defs) -> 
-    List.map (fun func_def -> processFuncDef func_def cfg "") func_defs
+    List.map (fun func_def -> processFuncDef func_def cfg "_client") func_defs
 
+let printSingleNode (node : (value Env.t)) = 
+  Env.iter (fun key value ->
+    match value with 
+    | VInt i -> print_endline (key ^ ": " ^ (string_of_int i))
+    | VBool b -> print_endline (key ^ ": " ^ (string_of_bool b))
+    | VString s -> print_endline (key ^ ": " ^ s)
+    | VNode n -> print_endline (key ^ ": " ^ (string_of_int n))
+    | VFuture _ -> print_endline (key ^ ": VFuture")
+    | VMap _ -> print_endline (key ^ ": VMap")
+    | VOption _ -> print_endline (key ^ ": VOptions")
+  ) node
+let print_global_nodes (nodes : (value Env.t) array) = 
+  Array.iter (fun node ->
+    print_endline ("Node has:");
+    printSingleNode node;
+    print_endline "";
+  ) nodes
 
 let processProgram (prog : prog) : program =
   match prog with 
@@ -151,8 +182,11 @@ let processProgram (prog : prog) : program =
     let client_func_infos = processClientIntf clientIntf cfg in
     let func_infos = role_func_infos @ client_func_infos in
     let _ = List.iter (fun func_info -> print_endline ("add to rpcnames " ^ func_info.name);Env.add rpcCalls func_info.name func_info) func_infos in
-    List.iter (fun func_info -> Env.add clientCalls func_info.name func_info) ((Env.find rpcCalls "init")::client_func_infos);
-    (* List.iter (fun func_info -> Env.add clientCalls func_info.name func_info) func_infos; *)
+    for i = 0 to (List.length roles) - 1 do
+      let init_funcname = "init_" ^ (List.nth roleNames i) in
+      Env.add clientCalls init_funcname (Env.find rpcCalls init_funcname)
+    done;
+    List.iter (fun func_info -> Env.add clientCalls func_info.name func_info) client_func_infos;
     let myProgram = 
       { cfg = cfg
       ; rpc = rpcCalls
@@ -161,25 +195,37 @@ let processProgram (prog : prog) : program =
 
 let interp (f : string) : unit =
   let globalState = 
-      { nodes = Array.make 1 (Env.create 91)  (* Replace 10 with the desired number of nodes *)
+      { nodes = Array.init 4 (fun _ -> Env.create 91)  (* Replace 10 with the desired number of nodes *)
       ; records = []
       ; history = DA.create ()  (* Assuming DA.create creates an empty dynamic array *)
-      ; free_clients = [0] } 
-  and myProgram = 
+      ; free_clients = [3] } in
+  (* Load the topology into every node *)
+  for node = 0 to ((Array.length globalState.nodes) - 1) do
+    for i = 0 to (List.length roleNames) - 1 do
+      let roleName = List.nth roleNames i in
+      let node_map = globalState.nodes.(node) in
+      Env.add node_map roleName (topology_config roleName);
+    done;
+  done;
+  (* Load the program into the simulator *)
+  let myProgram = 
     let ast = parse_file f 
   in processProgram ast in
   print_endline "attempt to execute init...";
-  schedule_client globalState myProgram "init" [];
-  schedule_record globalState myProgram;
+  List.iter (fun roleName -> 
+    schedule_client globalState myProgram ("init_" ^ roleName) [];
+    while not (List.is_empty globalState.records) do
+      schedule_record globalState myProgram;
+    done) roleNames;
   print_endline "...executed init";
   print_endline "attempt to execute write...";
-  schedule_client globalState myProgram "write" [VNode 0; VString "birthday"; VInt 214];
+  schedule_client globalState myProgram "write_client" [VString "birthday"; VInt 214];
   while not (List.is_empty globalState.records) do
     schedule_record globalState myProgram;
   done;
   print_endline "...executed write";
   print_endline "attempt to execute read...";
-  schedule_client globalState myProgram "read" [VNode 0; VString "birthday"];
+  schedule_client globalState myProgram "read_client" [VString "birthday"];
   while not (List.is_empty globalState.records) do
     schedule_record globalState myProgram;
   done;
@@ -188,34 +234,23 @@ let interp (f : string) : unit =
   Printf.fprintf oc "ClientID,Kind,Action,Server,Payload,Value\n";
   DA.iter (fun op -> 
     Printf.fprintf oc "%d," op.client_id
-    (* print_string op.op_action *)
     ; begin match op.kind with 
-      (* | Response -> print_string " Response" *)
       | Response -> Printf.fprintf oc "Response,"
-      (* | Invocation -> print_string " Invocation" *)
       | Invocation -> Printf.fprintf oc "Invocation,"
     end
     ; Printf.fprintf oc "%s," op.op_action
-    (* ; List.iter (fun v -> print_string " " *)
     ; List.iter ( fun v -> match v with
-      (* | VInt i -> print_int i *)
       | VInt i -> Printf.fprintf oc "%d," i
-      (* | VBool b -> print_string (string_of_bool b) *)
       | VBool b -> Printf.fprintf oc "%s," (string_of_bool b)
-      (* | VMap m -> print_string (string_of_map m) *)
       | VString s -> Printf.fprintf oc "%s," s
       | VNode n -> Printf.fprintf oc "%d," n
       | VFuture _ -> Printf.fprintf oc "TODO implement VFuture"
       | _ -> failwith "Type error!") 
       op.payload
-    (* ; print_endline "")  *)
     ; Printf.fprintf oc "\n"
-    )
-      globalState.history;;
+    ) globalState.history;
+    print_global_nodes globalState.nodes;;
 
 interp "/Users/jenniferlam/jennLang/bin/simple_spec.jenn"
 let () = print_endline "Program recognized as valid!"
 let () = print_endline "Program ran successfully!"
-
-
-
