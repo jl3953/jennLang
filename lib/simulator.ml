@@ -39,7 +39,7 @@ type lhs =
 
 type instr =
   | Assign of lhs * expr (* jenndbg probably assigning map values? *)
-  | Async of lhs * string * string * (expr list) (* jenndbg RPC*) 
+  | Async of lhs * expr * string * (expr list) (* jenndbg RPC*) 
   (* | Write of string * string (*jenndbg write a value *) *)
 [@@deriving ord]
 
@@ -226,7 +226,13 @@ let exec (state : state) (program : program) (record : record) =
     | Instr (instr, next) -> print_endline "Instr";
       record.pc <- next;
       begin match instr with
-        | Async (lhs, node, func, actuals) -> 
+        | Async (lhs, nodeVar, func, actuals) -> 
+          let node = 
+            begin match (eval env nodeVar) with
+            | VString s -> s
+            | VMap m -> failwith "Implement nested "
+            | _ -> failwith "Type error!" 
+            end in
           print_endline ("\tAsync node " ^ node);
           begin match load node env with
             | VNode node_id ->
