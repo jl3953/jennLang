@@ -42,6 +42,7 @@ and expr =
   | RpcCallRHS of rpc_call
 
 
+(* list of condition to be evaluated * statement body, else condition is just true*)
 type cond_stmt = IfElseIf of rhs * statement list 
 
 and statement =
