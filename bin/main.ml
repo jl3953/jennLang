@@ -267,7 +267,7 @@ let interp (f : string) : unit =
   done;
   print_endline "...executed read";
   let oc = open_out "output.csv" in
-  Printf.fprintf oc "ClientID,Kind,Action,Server,Payload,Value\n";
+  Printf.fprintf oc "ClientID,Kind,Action,Payload,Value\n";
   DA.iter (fun op -> 
     Printf.fprintf oc "%d," op.client_id
     ; begin match op.kind with 
