@@ -30,7 +30,12 @@ let convertRHS(rhs: rhs) : Simulator.expr =
   | VarRHS(var) -> EVar(var)
   | MapAccessRHS(map_name, key) -> EFind(map_name, EVar(key))
   | FuncCallRHS(_) -> failwith "TODO didn't implement FuncCallRHS yet"
-  | DefValRHS(_) -> failwith "TODO didn't implement DefValRHS yet"
+  | DefValRHS(default_value) -> 
+    begin match default_value with 
+    | EmptyMap -> EMap
+    | String(s) -> EString(s)
+    | Options(_) -> failwith "TODO didn't implement Options yet"
+    end
   | FieldAccessRHS (_, _) -> failwith "TODO what on earth is FieldAccessRHS again?"
 
 let rec generateCFGFromCondStmtList (cond_stmts : cond_stmt list) (cfg : CFG.t) (next : CFG.vertex) : CFG.vertex =
@@ -288,6 +293,6 @@ let interp (f : string) : unit =
 2. change the number of nodes in global state
 3. change the client idx
 *)
-interp "/Users/jenniferlam/jennLang/bin/CR.jenn"
+interp "/Users/jenniferlam/jennLang/bin/CRAQ.jenn"
 let () = print_endline "Program recognized as valid!"
 let () = print_endline "Program ran successfully!"
