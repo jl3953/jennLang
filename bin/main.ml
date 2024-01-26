@@ -10,6 +10,7 @@ let parse_file (filename : string) : prog =
   ast
 
 let roleNames = ["Head"; "Mid"; "Tail"]
+(* let roleNames = ["Head"] *)
 let topology_config = Env.create (List.length roleNames)
 let () = for i = 0 to (List.length roleNames) - 1 do
   Env.add topology_config (List.nth roleNames i) i
@@ -32,12 +33,32 @@ let convertRHS(rhs: rhs) : Simulator.expr =
   | DefValRHS(_) -> failwith "TODO didn't implement DefValRHS yet"
   | FieldAccessRHS (_, _) -> failwith "TODO what on earth is FieldAccessRHS again?"
 
-let rec generateCFGFromStmtList (stmts : statement list) (cfg : CFG.t) : CFG.vertex = 
+let rec generateCFGFromCondStmtList (cond_stmts : cond_stmt list) (cfg : CFG.t) (next : CFG.vertex) : CFG.vertex =
+  begin match cond_stmts with
+  | [] -> next
+  | cond_stmt :: rest -> 
+    begin
+      let elseif_vert = generateCFGFromCondStmtList rest cfg next in
+      begin match cond_stmt with
+      | IfElseIf(cond, stmts) ->
+        begin
+          let body_vert = generateCFGFromStmtList stmts cfg next in
+          CFG.create_vertex cfg (Cond(convertRHS cond, body_vert, elseif_vert))
+        end
+      end
+    end
+  end
+
+and generateCFGFromStmtList (stmts : statement list) (cfg : CFG.t) (last : CFG.vertex): CFG.vertex = 
   match stmts with
-  | [] -> CFG.create_vertex cfg (Return(EBool true))
+  | [] -> last
   | stmt :: rest -> 
     begin match stmt with 
-    | CondList (_) -> failwith "TODO implement CondList labels"
+    | CondList (cond_stmts) -> 
+      begin
+        let next = generateCFGFromStmtList rest cfg last in 
+        generateCFGFromCondStmtList cond_stmts cfg next
+      end
     | Return (expr) -> 
       begin match expr with
       | RHS(rhs) -> CFG.create_vertex cfg (Return(convertRHS rhs))
@@ -61,12 +82,12 @@ let rec generateCFGFromStmtList (stmts : statement list) (cfg : CFG.t) : CFG.ver
       | Assignment(_, _) -> failwith "Don't return an Assignment"
       end
     | Expr (expr) -> 
-      let next = generateCFGFromStmtList rest cfg in
+      let next = generateCFGFromStmtList rest cfg last in
       begin match expr with 
       | Assignment(lhs, exp) -> 
         begin match exp with
         | RHS(rhs) -> 
-          let next = generateCFGFromStmtList rest cfg in 
+          let next = generateCFGFromStmtList rest cfg last in 
           CFG.create_vertex cfg (Instr(Assign(convertLHS lhs, convertRHS rhs), next))
         | RpcCallRHS(rpc_call) ->
             begin match rpc_call with
@@ -102,7 +123,8 @@ let rec generateCFGFromStmtList (stmts : statement list) (cfg : CFG.t) : CFG.ver
 let processFuncDef (func_def : func_def) (cfg : CFG.t) (suffix : string) : function_info =
   match func_def with 
   | FuncDef(funcCall, _, body) -> 
-    let entry = generateCFGFromStmtList body cfg in
+    let last_vertex = CFG.create_vertex cfg (Return(EBool true)) in
+    let entry = generateCFGFromStmtList body cfg last_vertex in
     begin match funcCall with 
     | FuncCall(funcName, params) -> 
       let formals = List.map (fun param -> 
