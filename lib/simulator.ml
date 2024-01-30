@@ -380,7 +380,28 @@ let schedule_record (state : state) (program : program): unit =
       end else
         pick (n-1) (r::before) rs
   in
-  pick (Random.int (List.length state.records)) [] state.records
+  (* let rando = Random.int (List.length state.records) in *)
+  let head = List.hd state.records in
+  let vert = head.pc in 
+  let rando = 
+    match (CFG.label program.cfg vert) with
+    | Instr (_, _) -> 0
+    | Pause _ -> 
+      begin match (List.length state.records) with
+      | 1 -> 0
+      |__ -> 1
+      end
+    | Await (_, _, _) -> 
+      begin match (List.length state.records) with
+      | 1 -> 0
+      |__ -> 1
+      end
+    | Return _ -> 0
+    | Cond (_, _, _) -> 0
+  in
+  print_int rando;
+  print_endline "";
+  pick rando [] state.records
   (* pick 0 [] state.records *)
 
 (* Choose a client without a pending operation, create a new activation record

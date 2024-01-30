@@ -231,10 +231,10 @@ let processProgram (prog : prog) : program =
 
 let interp (f : string) : unit =
   let globalState = 
-      { nodes = Array.init 4 (fun _ -> Env.create 91)  (* Replace 10 with the desired number of nodes *)
+      { nodes = Array.init 6 (fun _ -> Env.create 91)  (* Replace 10 with the desired number of nodes *)
       ; records = []
       ; history = DA.create ()  (* Assuming DA.create creates an empty dynamic array *)
-      ; free_clients = [3] } in
+      ; free_clients = [3; 4] } in
   (* Load the topology into every node *)
   for node = 0 to ((Array.length globalState.nodes) - 1) do
     for i = 0 to (List.length roleNames) - 1 do
@@ -250,19 +250,27 @@ let interp (f : string) : unit =
   print_endline "attempt to execute init...";
   List.iter (fun roleName -> 
     schedule_client globalState myProgram ("init_" ^ roleName) [];
-    while not (List.is_empty globalState.records) do
+    while not ((List.length globalState.records) == 0) do
       schedule_record globalState myProgram;
     done) roleNames;
   print_endline "...executed init";
   print_endline "attempt to execute write...";
   schedule_client globalState myProgram "write_client" [VString "birthday"; VInt 214];
-  while not (List.is_empty globalState.records) do
+  while ((List.length globalState.records) > 0) do
     schedule_record globalState myProgram;
   done;
   print_endline "...executed write";
+  
+  schedule_client globalState myProgram "write_client" [VString "birthday"; VInt 2024];
+  schedule_record globalState myProgram;
+  schedule_record globalState myProgram;
+  schedule_client globalState myProgram "read_client" [VString "Head"; VString "birthday"];
+  while ((List.length globalState.free_clients) == 0) do
+    schedule_record globalState myProgram;
+  done;
   print_endline "attempt to execute read...";
-  schedule_client globalState myProgram "read_client" [VString "birthday"];
-  while not (List.is_empty globalState.records) do
+  schedule_client globalState myProgram "read_client" [VString "Tail"; VString "birthday"];
+  while not ((List.length globalState.records) == 0) do
     schedule_record globalState myProgram;
   done;
   print_endline "...executed read";
@@ -293,6 +301,6 @@ let interp (f : string) : unit =
 2. change the number of nodes in global state
 3. change the client idx
 *)
-interp "/Users/jenniferlam/jennLang/bin/CRAQ.jenn"
+interp "/home/jennifer/jennLang/bin/buggyCRAQ.jenn"
 let () = print_endline "Program recognized as valid!"
 let () = print_endline "Program ran successfully!"

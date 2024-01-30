@@ -1,0 +1,59 @@
+Head {
+    map<string, int> db = {};
+    map<string, bool> dirty = {};
+    Node successor = "Mid";
+
+    func Read(key) -> int {
+        return db[key];
+    }
+
+    func Write(key, val) -> none {
+        db[key] = val;
+        dirty[key] = true;
+        rpc_call(successor, Write(key, val));
+        dirty[key] = false;
+    }
+}
+
+Mid {
+    map<string, int> db = {};
+    map<string, bool> dirty = {};
+    Node predecessor = "Head";
+    Node successor = "Tail";
+
+    func Read(key) -> int {
+        return db[key];
+    }
+    
+    func Write(key, val) -> none {
+        db[key] = val;
+        dirty[key] = true;
+        rpc_call(successor, Write(key, val));
+        dirty[key] = false;
+    } 
+}
+
+Tail {
+    map<string, int> db = {};
+    Node predecessor = "Mid";
+
+    func Read(key) -> int {
+        return db[key];
+    }
+
+    func Write(key, val) -> none {
+        db[key] = val;
+    }
+}
+
+ClientInterface { 
+    
+    func read(dest, key) -> int {
+        val = rpc_call(dest, Read(key));
+        return val;
+    }
+
+    func write(key, val) -> none {
+        rpc_call("Head", Write(key, val));
+    }
+}
