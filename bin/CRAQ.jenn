@@ -2,6 +2,7 @@ Head {
     map<string, int> db = {};
     map<string, bool> dirty = {};
     Node successor = "Mid";
+	string role = "Head";
 
     func Read(key) -> int {
         if (dirty[key]) { 
@@ -24,7 +25,36 @@ Mid {
     map<string, int> db = {};
     map<string, bool> dirty = {};
     Node predecessor = "Head";
-    Node successor = "Tail";
+    Node successor = "Mid2";
+	String role = "Mid";
+
+    func Read(key) -> int {
+        if (dirty[key]) {
+            val = rpc_call("Tail", Read(key));
+            return val;
+        } else {
+            return db[key];
+        }
+    }
+    
+    func Write(key, val) -> none {
+        db[key] = val;
+        dirty[key] = true;
+        rpc_call(successor, Write(key, val));
+        dirty[key] = false;
+    }
+
+	func ChangeSuccessor(newSuccessor) -> none {
+		successor = newSuccessor;
+	} 
+}
+
+Mid2 {
+    map<string, int> db = {};
+    map<string, bool> dirty = {};
+    Node predecessor = "Mid";
+    Node successor = "Mid3";
+	string role = "Mid2";
 
     func Read(key) -> int {
         if (dirty[key]) {
@@ -43,9 +73,38 @@ Mid {
     } 
 }
 
+Mid3 {
+    map<string, int> db = {};
+    map<string, bool> dirty = {};
+    Node predecessor = "Mid2";
+    Node successor = "Tail";
+	string role = "Mid3";
+
+    func Read(key) -> int {
+        if (dirty[key]) {
+            val = rpc_call("Tail", Read(key));
+            return val;
+        } else {
+            return db[key];
+        }
+    }
+    
+    func Write(key, val) -> none {
+        db[key] = val;
+        dirty[key] = true;
+        rpc_call(successor, Write(key, val));
+        dirty[key] = false;
+    } 
+
+	func ChangePredecessor(newPredecessor) -> none {
+		predecessor = newPredecessor;
+	}
+}
+
 Tail {
     map<string, int> db = {};
-    Node predecessor = "Mid";
+    Node predecessor = "Mid3";
+	string role = "Tail";
 
     func Read(key) -> int {
         return db[key];
@@ -58,8 +117,7 @@ Tail {
 
 ClientInterface { 
     
-    func read(key) -> int {
-        dest = "Tail";
+    func read(dest, key) -> int {
         val = rpc_call(dest, Read(key));
         return val;
     }
@@ -67,4 +125,12 @@ ClientInterface {
     func write(key, val) -> none {
         rpc_call("Head", Write(key, val));
     }
+
+	func changeSuccessor(dest, newSucc) -> none {
+		rpc_call(dest, ChangeSuccessor(newSucc));
+	}
+
+	func changePredecessor(dest, newPred) -> none {
+		rpc_call(dest, ChangePredecessor(newPred));
+	}
 }

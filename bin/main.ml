@@ -9,7 +9,7 @@ let parse_file (filename : string) : prog =
   close_in ic;
   ast
 
-let roleNames = ["Head"; "Mid"; "Tail"]
+let roleNames = ["Head"; "Mid"; "Mid2"; "Mid3"; "Tail"]
 (* let roleNames = ["Head"] *)
 let topology_config = Env.create (List.length roleNames)
 let () = for i = 0 to (List.length roleNames) - 1 do
@@ -216,10 +216,12 @@ let processProgram (prog : prog) : program =
     let client_func_infos = processClientIntf clientIntf cfg in
     let func_infos = role_func_infos @ client_func_infos in
     let _ = List.iter (fun func_info ->
+      print_endline ("Adding function to rpcCalls " ^ func_info.name);
        Env.add rpcCalls func_info.name func_info
        ) func_infos in
     for i = 0 to (List.length roles) - 1 do
       let init_funcname = "init_" ^ (List.nth roleNames i) in
+      print_endline init_funcname;
       Env.add clientCalls init_funcname (Env.find rpcCalls init_funcname)
     done;
     List.iter (fun func_info -> Env.add clientCalls func_info.name func_info) client_func_infos;
@@ -234,7 +236,7 @@ let interp (f : string) : unit =
       { nodes = Array.init 6 (fun _ -> Env.create 91)  (* Replace 10 with the desired number of nodes *)
       ; records = []
       ; history = DA.create ()  (* Assuming DA.create creates an empty dynamic array *)
-      ; free_clients = [3; 4] } in
+      ; free_clients = [5] } in
   (* Load the topology into every node *)
   for node = 0 to ((Array.length globalState.nodes) - 1) do
     for i = 0 to (List.length roleNames) - 1 do
@@ -260,20 +262,28 @@ let interp (f : string) : unit =
     schedule_record globalState myProgram;
   done;
   print_endline "...executed write";
-  
-  schedule_client globalState myProgram "write_client" [VString "birthday"; VInt 2024];
-  schedule_record globalState myProgram;
-  schedule_record globalState myProgram;
-  schedule_client globalState myProgram "read_client" [VString "Head"; VString "birthday"];
-  while ((List.length globalState.free_clients) == 0) do
-    schedule_record globalState myProgram;
-  done;
   print_endline "attempt to execute read...";
   schedule_client globalState myProgram "read_client" [VString "Tail"; VString "birthday"];
   while not ((List.length globalState.records) == 0) do
     schedule_record globalState myProgram;
   done;
   print_endline "...executed read";
+  schedule_client globalState myProgram "changeSuccessor_client" [VString "Mid"; VString "Mid3"];
+  while not ((List.length globalState.records) == 0) do
+    schedule_record globalState myProgram;
+  done;
+  schedule_client globalState myProgram "changePredecessor_client" [VString "Mid3"; VString "Mid"];
+  while not ((List.length globalState.records) == 0) do
+    schedule_record globalState myProgram;
+  done;
+  schedule_client globalState myProgram "write_client" [VString "birthday"; VInt 2024];
+  while not ((List.length globalState.records) == 0) do
+    schedule_record globalState myProgram;
+  done;
+  schedule_client globalState myProgram "read_client" [VString "Mid"; VString "birthday"];
+  while not ((List.length globalState.records) == 0) do
+    schedule_record globalState myProgram;
+  done;
   let oc = open_out "output.csv" in
   Printf.fprintf oc "ClientID,Kind,Action,Payload,Value\n";
   DA.iter (fun op -> 
@@ -301,6 +311,6 @@ let interp (f : string) : unit =
 2. change the number of nodes in global state
 3. change the client idx
 *)
-interp "/home/jennifer/jennLang/bin/buggyCRAQ.jenn"
+interp "/Users/jenniferlam/jennLang/bin/CRAQ.jenn"
 let () = print_endline "Program recognized as valid!"
 let () = print_endline "Program ran successfully!"

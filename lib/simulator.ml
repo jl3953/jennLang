@@ -275,6 +275,7 @@ let exec (state : state) (program : program) (record : record) =
               begin match load role env with 
               | VNode node_id ->
                 let new_future = ref None in
+                print_endline ("Find func " ^ (func ^ "_" ^ role) ^ " for node " ^ string_of_int node_id);
                 let { entry; formals; _ } = function_info (func ^ "_" ^ role) program in
                 let new_env = Env.create 91 in
                 List.iter2 (fun (formal, _) actual ->
@@ -380,8 +381,8 @@ let schedule_record (state : state) (program : program): unit =
       end else
         pick (n-1) (r::before) rs
   in
-  (* let rando = Random.int (List.length state.records) in *)
-  let head = List.hd state.records in
+  let rando = Random.int (List.length state.records) in
+  (* let head = List.hd state.records in
   let vert = head.pc in 
   let rando = 
     match (CFG.label program.cfg vert) with
@@ -398,7 +399,7 @@ let schedule_record (state : state) (program : program): unit =
       end
     | Return _ -> 0
     | Cond (_, _, _) -> 0
-  in
+  in *)
   print_int rando;
   print_endline "";
   pick rando [] state.records
@@ -413,6 +414,7 @@ let schedule_client (state : state) (program : program) (func_name : string) (ac
     | (c::cs) ->
       if n == 0 then begin
         let op =
+          print_endline ("func_name: " ^ func_name);
           Env.find program.client_ops func_name
           (* List.nth program.client_ops (Random.int (List.length program.client_ops)) *)
         in
