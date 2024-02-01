@@ -381,8 +381,8 @@ let schedule_record (state : state) (program : program): unit =
       end else
         pick (n-1) (r::before) rs
   in
-  let rando = Random.int (List.length state.records) in
-  (* let head = List.hd state.records in
+  (* let rando = Random.int (List.length state.records) in *)
+  let head = List.hd state.records in
   let vert = head.pc in 
   let rando = 
     match (CFG.label program.cfg vert) with
@@ -399,7 +399,7 @@ let schedule_record (state : state) (program : program): unit =
       end
     | Return _ -> 0
     | Cond (_, _, _) -> 0
-  in *)
+  in
   print_int rando;
   print_endline "";
   pick rando [] state.records

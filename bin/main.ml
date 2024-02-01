@@ -121,7 +121,19 @@ and generateCFGFromStmtList (stmts : statement list) (cfg : CFG.t) (last : CFG.v
               CFG.create_vertex cfg (Instr(Async(LVar("async_future"), EVar node, func_name, actuals), await_vert)) 
             end
           end
-      | RHS(_) -> failwith "No standalone RHS"
+      | RHS(rhs) -> 
+        begin match rhs with 
+        | FuncCallRHS(func_call) -> 
+          begin match func_call with
+          | FuncCall(func_name, actuals) -> 
+            let actuals = List.map (fun actual -> 
+              match actual with Param(rhs) -> convertRHS rhs
+            ) actuals in
+            let await_vert = CFG.create_vertex cfg (Await(LVar("dontcare"), EVar "async_future", next)) in
+            CFG.create_vertex cfg (Instr(Async(LVar("async_future"), EVar "dontcare", func_name, actuals), await_vert))
+          end
+        | _ -> failwith "Haven't implemented the rest of RHS yet"
+        end
       end
     end
     
@@ -233,10 +245,10 @@ let processProgram (prog : prog) : program =
 
 let interp (f : string) : unit =
   let globalState = 
-      { nodes = Array.init 6 (fun _ -> Env.create 91)  (* Replace 10 with the desired number of nodes *)
+      { nodes = Array.init 7 (fun _ -> Env.create 91)  (* Replace 10 with the desired number of nodes *)
       ; records = []
       ; history = DA.create ()  (* Assuming DA.create creates an empty dynamic array *)
-      ; free_clients = [5] } in
+      ; free_clients = [5; 6] } in
   (* Load the topology into every node *)
   for node = 0 to ((Array.length globalState.nodes) - 1) do
     for i = 0 to (List.length roleNames) - 1 do
@@ -268,22 +280,27 @@ let interp (f : string) : unit =
     schedule_record globalState myProgram;
   done;
   print_endline "...executed read";
-  schedule_client globalState myProgram "changeSuccessor_client" [VString "Mid"; VString "Mid3"];
-  while not ((List.length globalState.records) == 0) do
-    schedule_record globalState myProgram;
-  done;
-  schedule_client globalState myProgram "changePredecessor_client" [VString "Mid3"; VString "Mid"];
-  while not ((List.length globalState.records) == 0) do
-    schedule_record globalState myProgram;
-  done;
+  print_endline "attempt to execute dirty write + failover...";
   schedule_client globalState myProgram "write_client" [VString "birthday"; VInt 2024];
+  schedule_record globalState myProgram;
+  schedule_record globalState myProgram;
+  schedule_record globalState myProgram;
+  schedule_client globalState myProgram "triggerFailoverOfCrashedNodePred_client" [VString "Mid"; VString "Mid3"];
   while not ((List.length globalState.records) == 0) do
     schedule_record globalState myProgram;
   done;
-  schedule_client globalState myProgram "read_client" [VString "Mid"; VString "birthday"];
+  schedule_client globalState myProgram "triggerFailoverOfCrashedNodeSucc_client" [VString "Mid3"; VString "Mid"];
   while not ((List.length globalState.records) == 0) do
     schedule_record globalState myProgram;
   done;
+  (* schedule_client globalState myProgram "write_client" [VString "birthday"; VInt 2024]; *)
+  while not ((List.length globalState.records) == 0) do
+    schedule_record globalState myProgram;
+  done;
+  schedule_client globalState myProgram "read_client" [VString "Head"; VString "birthday"];
+  while not ((List.length globalState.records) == 0) do
+    schedule_record globalState myProgram;
+  done; 
   let oc = open_out "output.csv" in
   Printf.fprintf oc "ClientID,Kind,Action,Payload,Value\n";
   DA.iter (fun op -> 

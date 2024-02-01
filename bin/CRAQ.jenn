@@ -47,6 +47,11 @@ Mid {
 	func ChangeSuccessor(newSuccessor) -> none {
 		successor = newSuccessor;
 	} 
+
+	func PropagateDirtyWrites() -> none {
+		dirtyKey = "birthday";
+		rpc_call(successor, ReceiveDirtyWritesFromFailover(dirtyKey, db[dirtyKey]));
+	}
 }
 
 Mid2 {
@@ -99,6 +104,18 @@ Mid3 {
 	func ChangePredecessor(newPredecessor) -> none {
 		predecessor = newPredecessor;
 	}
+
+	func ReceiveDirtyWritesFromFailover(dirtyKey, val) -> none {
+		if (dirty[dirtyKey]) {
+			return none;
+		} else {
+			db[dirtyKey] = val;
+        	dirty[dirtyKey] = true;
+        	rpc_call(successor, Write(dirtyKey, val));
+        	dirty[dirtyKey] = false;		
+		}
+	}
+
 }
 
 Tail {
@@ -126,11 +143,12 @@ ClientInterface {
         rpc_call("Head", Write(key, val));
     }
 
-	func changeSuccessor(dest, newSucc) -> none {
+	func triggerFailoverOfCrashedNodePred(dest, newSucc) -> none {
 		rpc_call(dest, ChangeSuccessor(newSucc));
+		rpc_call(dest, PropagateDirtyWrites());
 	}
 
-	func changePredecessor(dest, newPred) -> none {
+	func triggerFailoverOfCrashedNodeSucc(dest, newPred) -> none {
 		rpc_call(dest, ChangePredecessor(newPred));
 	}
 }
