@@ -245,10 +245,10 @@ let processProgram (prog : prog) : program =
 
 let interp (f : string) : unit =
   let globalState = 
-      { nodes = Array.init 7 (fun _ -> Env.create 91)  (* Replace 10 with the desired number of nodes *)
+      { nodes = Array.init 8 (fun _ -> Env.create 91)  (* Replace 10 with the desired number of nodes *)
       ; records = []
       ; history = DA.create ()  (* Assuming DA.create creates an empty dynamic array *)
-      ; free_clients = [5; 6] } in
+      ; free_clients = [5; 6; 7] } in
   (* Load the topology into every node *)
   for node = 0 to ((Array.length globalState.nodes) - 1) do
     for i = 0 to (List.length roleNames) - 1 do
@@ -282,9 +282,21 @@ let interp (f : string) : unit =
   print_endline "...executed read";
   print_endline "attempt to execute dirty write + failover...";
   schedule_client globalState myProgram "write_client" [VString "birthday"; VInt 2024];
+  (* schedule_record globalState myProgram 3x to imitate dirty write*)
+  (* schedule_record globalState myProgram 8x to imitate back-prop clean write *)
   schedule_record globalState myProgram;
   schedule_record globalState myProgram;
   schedule_record globalState myProgram;
+  schedule_client globalState myProgram "write_client" [VString "epoch"; VInt 1980];
+  schedule_record globalState myProgram;
+  schedule_record globalState myProgram;
+  schedule_record globalState myProgram;
+  schedule_record globalState myProgram;
+  schedule_record globalState myProgram;
+  schedule_record globalState myProgram;
+  schedule_record globalState myProgram;
+  schedule_record globalState myProgram;
+  print_global_nodes globalState.nodes;
   schedule_client globalState myProgram "triggerFailoverOfCrashedNodePred_client" [VString "Mid"; VString "Mid3"];
   while not ((List.length globalState.records) == 0) do
     schedule_record globalState myProgram;
@@ -293,14 +305,17 @@ let interp (f : string) : unit =
   while not ((List.length globalState.records) == 0) do
     schedule_record globalState myProgram;
   done;
-  (* schedule_client globalState myProgram "write_client" [VString "birthday"; VInt 2024]; *)
   while not ((List.length globalState.records) == 0) do
     schedule_record globalState myProgram;
   done;
-  schedule_client globalState myProgram "read_client" [VString "Head"; VString "birthday"];
+  schedule_client globalState myProgram "read_client" [VString "Mid"; VString "birthday"];
   while not ((List.length globalState.records) == 0) do
     schedule_record globalState myProgram;
   done; 
+  schedule_client globalState myProgram "read_client" [VString "Head"; VString "epoch"];
+  while not ((List.length globalState.records) == 0) do
+    schedule_record globalState myProgram;
+  done;
   let oc = open_out "output.csv" in
   Printf.fprintf oc "ClientID,Kind,Action,Payload,Value\n";
   DA.iter (fun op -> 

@@ -52,6 +52,12 @@ Mid {
 		dirtyKey = "birthday";
 		rpc_call(successor, ReceiveDirtyWritesFromFailover(dirtyKey, db[dirtyKey]));
 	}
+	
+	func ReceiveCleanWritesFromFailover(cleanKey, value) -> none {
+		if (dirty[cleanKey]) {
+			dirty[cleanKey] = false;
+		}
+	}
 }
 
 Mid2 {
@@ -116,6 +122,11 @@ Mid3 {
 		}
 	}
 
+	func BackPropagateCleanWrites() -> none {
+		cleanKey = "birthday";
+		rpc_call(predecessor, ReceiveCleanWritesFromFailover(cleanKey, db[cleanKey]));
+	}
+
 }
 
 Tail {
@@ -150,5 +161,6 @@ ClientInterface {
 
 	func triggerFailoverOfCrashedNodeSucc(dest, newPred) -> none {
 		rpc_call(dest, ChangePredecessor(newPred));
+		rpc_call(dest, BackPropagateCleanWrites());
 	}
 }
