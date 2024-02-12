@@ -1,145 +1,120 @@
-Head {
-    map<string, int> db = {};
-    map<string, bool> dirty = {};
-    Node successor = "Mid";
-	string role = "Head";
+Node {
+    String role = "";
+    map<Key, Value> db = {};
+    map<Key, bool> is_committed = {};
+    int predecessor = 0;
+    int successor = 0;
+    int head = 0;
+    int tail = 0;
 
-    func Read(key) -> int {
-        if (dirty[key]) { 
-            val = rpc_call("Tail", Read(key));
-            return val;
+    func Read(key) -> Value {
+        if ((role == "Head") || (role == "Mid")) {
+            if (!is_committed[key]) {
+                return rpc_call(tail, Read(key));
+            } else {
+                return db[key];
+            }
         } else {
             return db[key];
         }
     }
 
-    func Write(key, val) -> none {
-        db[key] = val;
-        dirty[key] = true;
-        rpc_call(successor, Write(key, val));
-        dirty[key] = false;
-    }
-}
-
-Mid {
-    map<string, int> db = {};
-    map<string, bool> dirty = {};
-    Node predecessor = "Head";
-    Node successor = "Mid2";
-	String role = "Mid";
-
-    func Read(key) -> int {
-        if (dirty[key]) {
-            val = rpc_call("Tail", Read(key));
-            return val;
+    func Write(key, value) -> none {
+        if ((role == "Head") || (role == "Mid")) {
+            db[key] = value;
+            is_committed[key] = false;
+            rpc_call(successor, Write(key, value));
+            is_committed[key] = true;
         } else {
-            return db[key];
+            db[key] = value;
+            is_committed[key] = true;
         }
     }
-    
-    func Write(key, val) -> none {
-        db[key] = val;
-        dirty[key] = true;
-        rpc_call(successor, Write(key, val));
-        dirty[key] = false;
-    }
 
-	func ChangeSuccessor(newSuccessor) -> none {
-		successor = newSuccessor;
-	} 
+    func TriggerFailover(failed_node, new_tail) -> none {
+        tail = new_tail;
+        if (role == "Tail") {
+            role = "Mid";
+            successor = tail;
+            rpc_call(tail, PropagateLogs(db));
+        }
 
-	func PropagateDirtyWrites() -> none {
-		dirtyKey = "birthday";
-		rpc_call(successor, ReceiveDirtyWritesFromFailover(dirtyKey, db[dirtyKey]));
-	}
-	
-	func ReceiveCleanWritesFromFailover(cleanKey, value) -> none {
-		if (dirty[cleanKey]) {
-			dirty[cleanKey] = false;
-		}
-	}
-}
-
-Mid2 {
-    map<string, int> db = {};
-    map<string, bool> dirty = {};
-    Node predecessor = "Mid";
-    Node successor = "Mid3";
-	string role = "Mid2";
-
-    func Read(key) -> int {
-        if (dirty[key]) {
-            val = rpc_call("Tail", Read(key));
-            return val;
+        if (failed_node == tail) {
+            if (successor == failed_node) {
+                successor = new_tail;
+                rpc_call(tail, PropagateLogsToTail(db));
+            } 
+        } else if (failed_node == head) {
+            if (predecessor == failed_node) {
+                role = "Head";
+            }
         } else {
-            return db[key];
+            if (failed_node == successor) {
+                successor = failed_node.successor;
+                dirty_logs = {};
+                for (key, committed in range(is_committed)) {
+                    if (!committed) {
+                        dirty_logs[key] = db[key];
+                    }
+                }
+                rpc_call(successor, PropagateDirtyLogs(dirty_logs));
+            }
+
+            if (failed_node == predecessor) {
+                predecessor = failed_node.predecessor;
+                clean_logs = {};
+                for (key, committed in range(is_committed)) {
+                    if (committed) {
+                        clean_logs[key] = db[key];
+                    }
+                }
+                rpc_call(predecessor, BackPropagateCleanLogs(clean_logs));
+            }
         }
     }
-    
-    func Write(key, val) -> none {
-        db[key] = val;
-        dirty[key] = true;
-        rpc_call(successor, Write(key, val));
-        dirty[key] = false;
-    } 
-}
 
-Mid3 {
-    map<string, int> db = {};
-    map<string, bool> dirty = {};
-    Node predecessor = "Mid2";
-    Node successor = "Tail";
-	string role = "Mid3";
+    func Init(assigned_role, pred, succ, h, t) -> none {
+        role = assigned_role;
+        predecessor = pred;
+        successor = succ;
+        head = h;
+        tail = t;
+    }
 
-    func Read(key) -> int {
-        if (dirty[key]) {
-            val = rpc_call("Tail", Read(key));
-            return val;
-        } else {
-            return db[key];
+    func PropagateDirtyLogs(dirty_logs) {
+        diff_dirty_logs = {};
+        for (key, value in range(dirty_logs)) {
+            if (value != db[key] && true == is_committed[key]) {
+                db[key] = value;
+                diff_dirty_logs[key] = value;
+            }
+        }
+
+        if (role != "Tail") {
+            rpc_call(successor, PropagateDirtyLogs(diff_dirty_logs));
         }
     }
-    
-    func Write(key, val) -> none {
-        db[key] = val;
-        dirty[key] = true;
-        rpc_call(successor, Write(key, val));
-        dirty[key] = false;
-    } 
 
-	func ChangePredecessor(newPredecessor) -> none {
-		predecessor = newPredecessor;
-	}
+    func BackPropagateCleanLogs(clean_logs) {
+        diff_clean_logs = {};
+        for (key, value in range(clean_logs)) {
+            if (value == db[key] && false == is_committed[key]) {
+                is_committed[key] = true;
+                diff_clean_logs[key] = value;
+            }
+        }
 
-	func ReceiveDirtyWritesFromFailover(dirtyKey, val) -> none {
-		if (dirty[dirtyKey]) {
-			return none;
-		} else {
-			db[dirtyKey] = val;
-        	dirty[dirtyKey] = true;
-        	rpc_call(successor, Write(dirtyKey, val));
-        	dirty[dirtyKey] = false;		
-		}
-	}
-
-	func BackPropagateCleanWrites() -> none {
-		cleanKey = "birthday";
-		rpc_call(predecessor, ReceiveCleanWritesFromFailover(cleanKey, db[cleanKey]));
-	}
-
-}
-
-Tail {
-    map<string, int> db = {};
-    Node predecessor = "Mid3";
-	string role = "Tail";
-
-    func Read(key) -> int {
-        return db[key];
+        if (role != "Head") {
+            BackPropagateCleanLogs(diff_clean_logs);
+        }
     }
 
-    func Write(key, val) -> none {
-        db[key] = val;
+    func PropagageLogsToTail(other_db) -> none {
+        if (role == "Tail") {
+            for (key, value in range(other_db)) {
+                db[key] = value;
+            }
+        } 
     }
 }
 
@@ -151,16 +126,11 @@ ClientInterface {
     }
 
     func write(key, val) -> none {
-        rpc_call("Head", Write(key, val));
+        dest = head;
+        rpc_call(dest, Write(key, val));
     }
 
-	func triggerFailoverOfCrashedNodePred(dest, newSucc) -> none {
-		rpc_call(dest, ChangeSuccessor(newSucc));
-		rpc_call(dest, PropagateDirtyWrites());
-	}
-
-	func triggerFailoverOfCrashedNodeSucc(dest, newPred) -> none {
-		rpc_call(dest, ChangePredecessor(newPred));
-		rpc_call(dest, BackPropagateCleanWrites());
-	}
+	func triggerFailover(dest, failed_node, new_tail) -> none {
+        rpc_call(dest, failed_node, new_tail);
+    }
 }
