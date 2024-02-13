@@ -157,24 +157,6 @@ left_side:
   | rhs = right_side DOT key = ID
     { FieldAccessLHS(rhs, key) } 
 
-// right_side:
-//   | TRUE
-//     { Bool true }
-//   | FALSE
-//     { Bool false }
-//   | id = ID
-//     { VarRHS(id) }
-//   | mapName = ID LEFT_SQUARE_BRACKET key = ID RIGHT_SQUARE_BRACKET
-//     { MapAccessRHS(mapName, key) }
-//   | mapName = ID DOT key = ID
-//     { MapAccessRHS(mapName, key) }
-//   | func_call = func_call
-//     { FuncCallRHS(func_call)}
-//   | rpc_call = rpc_call
-//     { RpcCallRHS(rpc_call) }
-//   | default_val = default_val
-//     { DefValRHS(default_val) }
-
 right_side:
   | TRUE
     { Bool true }
@@ -190,6 +172,16 @@ right_side:
     { FuncCallRHS(func_call)}
   | default_val = default_val
     { DefValRHS(default_val) }
+    | BANG rhs = right_side
+    { Not(rhs) }
+  | left = right_side EQUALS_EQUALS right = right_side
+    { EqualsEquals(left, right) }
+  | left = right_side NOT_EQUALS right = right_side
+    { NotEquals(left, right) }
+  | left = right_side AND right = right_side
+    { And(left, right) }
+  | left = right_side OR right = right_side
+    { Or(left, right) }
 
   exp:
   | left = left_side EQUALS right = exp

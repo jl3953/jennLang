@@ -46,6 +46,7 @@ rule token = parse
   | '=' { EQUALS }
   | '<' {LEFT_ANGLE_BRACKET}
   | '>' {RIGHT_ANGLE_BRACKET}
+  | '!' {BANG}
   | '{' {LEFT_CURLY_BRACE}
   | '}' {RIGHT_CURLY_BRACE}
   | '(' {LEFT_PAREN}
@@ -55,6 +56,10 @@ rule token = parse
   | '.' {DOT}
   | ';' {SEMICOLON}
   | '"' {QUOTE}
+  | "==" {EQUALS_EQUALS}
+  | "!=" {NOT_EQUALS}
+  | "&&" {AND}
+  | "||" {OR}
   | "true" { TRUE true }
   | "false" { FALSE false }
   | "func" { FUNC }
