@@ -18,6 +18,11 @@ type rhs =
   | FuncCallRHS of func_call
   | DefValRHS of default_value
   | FieldAccessRHS of rhs * string
+  | Not of rhs
+  | EqualsEquals of rhs * rhs
+  | NotEquals of rhs * rhs
+  | And of rhs * rhs
+  | Or of rhs * rhs
 
 and param = Param of rhs 
 
