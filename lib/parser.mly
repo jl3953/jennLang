@@ -5,24 +5,37 @@
 
 %token <string> ID
 %token <bool> TRUE FALSE
+%token AND
 %token ARROW
+%token BANG
 %token CLIENT_INTERFACE
+%token COLON
 %token COMMA
 %token EQUALS
+%token EQUALS_EQUALS
+%token FOR
 %token FUNC
 %token IF ELSEIF ELSE
+%token IN
 %token LEFT_ANGLE_BRACKET RIGHT_ANGLE_BRACKET
 %token LEFT_CURLY_BRACE RIGHT_CURLY_BRACE 
 %token LEFT_PAREN RIGHT_PAREN 
 %token LEFT_SQUARE_BRACKET RIGHT_SQUARE_BRACKET
 %token MAP
+%token NOT_EQUALS
 %token OPTIONS
+%token OR
 %token DOT
 %token RETURN
 %token RPC_CALL
 %token SEMICOLON
 %token QUOTE
 %token EOF
+
+// %left BANG
+// %left AND
+// %left OR
+%left EQUALS_EQUALS NOT_EQUALS
 
 %type <Ast.prog> program
 // %type <if_stmt> if_stmt
@@ -84,17 +97,17 @@ statements:
     { s :: ss }
 
 if_stmt:
-  | IF LEFT_PAREN cond = right_side RIGHT_PAREN LEFT_CURLY_BRACE 
+  | IF LEFT_PAREN cond = boolean RIGHT_PAREN LEFT_CURLY_BRACE 
     body = statements
     RIGHT_CURLY_BRACE
     { IfElseIf (cond, body) }
 
 elseif_stmts:
-  | ELSEIF LEFT_PAREN cond = right_side RIGHT_PAREN LEFT_CURLY_BRACE 
+  | ELSEIF LEFT_PAREN cond = boolean RIGHT_PAREN LEFT_CURLY_BRACE 
     body = statements
     RIGHT_CURLY_BRACE
     { IfElseIf(cond, body) :: []}
-  | ELSEIF LEFT_PAREN cond = right_side RIGHT_PAREN LEFT_CURLY_BRACE 
+  | ELSEIF LEFT_PAREN cond = boolean RIGHT_PAREN LEFT_CURLY_BRACE 
     body = statements
     RIGHT_CURLY_BRACE el = elseif_stmts
     { IfElseIf(cond, body) :: el}
@@ -131,17 +144,45 @@ options:
   | id = ID COMMA opts = options
     { Option(id) :: opts }
 
-default_val:
+kv_pairs:
+  | key = ID COLON value = right_side
+    { (key, value) :: []}
+  | key = ID COLON value = right_side COMMA kvs = kv_pairs
+    { (key, value)::kvs }
+
+map_expr:
   | LEFT_CURLY_BRACE RIGHT_CURLY_BRACE
-    { EmptyMap }
+    { Map([]) }
+  | LEFT_CURLY_BRACE kvs = kv_pairs RIGHT_CURLY_BRACE
+    { Map(kvs) } 
+
+items:
+  | rhs = right_side
+    { rhs :: [] }
+  | rhs = right_side COMMA rest = items
+    { rhs :: rest }
+
+list_expr:
+  | LEFT_SQUARE_BRACKET RIGHT_SQUARE_BRACKET
+    { List([]) }
+  | LEFT_SQUARE_BRACKET items = items RIGHT_SQUARE_BRACKET
+    { List(items) }
+
+collection:
+  | map_expr = map_expr
+    { map_expr }
+  | list_expr = list_expr
+    { list_expr }
+  
+literals:
   | OPTIONS LEFT_PAREN opts = options RIGHT_PAREN
     { Options(opts) }
   | QUOTE s = ID QUOTE
     { String(s) }
 
 var_init:
-  | typ = type_def id = ID EQUALS default = default_val
-    { VarInit(typ, id, default) }
+  | typ = type_def id = ID EQUALS right_side = right_side
+    { VarInit(typ, id, right_side) }
 
 var_inits:
   | v = var_init SEMICOLON
@@ -157,31 +198,53 @@ left_side:
   | rhs = right_side DOT key = ID
     { FieldAccessLHS(rhs, key) } 
 
-right_side:
+bool_lit:
   | TRUE
     { Bool true }
   | FALSE
     { Bool false }
+
+boolean:
+  | b = bool_lit
+    { b }
+  | BANG bool_lit = bool_lit
+    { Not bool_lit }
+  | BANG LEFT_PAREN b = boolean RIGHT_PAREN
+    { Not b}
+  | b1 = bool_lit AND b2 = bool_lit
+    { And (b1, b2) }
+  | b1 = bool_lit AND LEFT_PAREN b2 = boolean RIGHT_PAREN
+    { And (b1, b2) }
+  | LEFT_PAREN b1 = boolean RIGHT_PAREN AND b2 = bool_lit 
+    { And (b1, b2) }
+  | b1 = bool_lit OR b2 = bool_lit
+    { Or (b1, b2) }
+  | b1 = bool_lit OR LEFT_PAREN b2 = boolean RIGHT_PAREN
+    { Or (b1, b2) }
+  | LEFT_PAREN b1 = boolean RIGHT_PAREN OR b2 = bool_lit
+    { Or (b1, b2) }
+  | rhs1 = right_side EQUALS_EQUALS rhs2 = right_side
+    { EqualsEquals (rhs1, rhs2)}
+  | rhs1 = right_side NOT_EQUALS rhs2 = right_side
+    { NotEquals (rhs1, rhs2)}
+  | LEFT_PAREN b = boolean RIGHT_PAREN
+    { b }
+
+right_side:
   | id = ID
     { VarRHS(id) }
   | mapName = ID LEFT_SQUARE_BRACKET key = ID RIGHT_SQUARE_BRACKET
     { MapAccessRHS(mapName, key) }
-  | rhs = right_side DOT key = ID
-    { FieldAccessRHS(rhs, key) }
+  // | rhs = right_side DOT key = ID
+  //   { FieldAccessRHS(rhs, key) }
   | func_call = func_call
     { FuncCallRHS(func_call)}
-  | default_val = default_val
-    { DefValRHS(default_val) }
-    | BANG rhs = right_side
-    { Not(rhs) }
-  | left = right_side EQUALS_EQUALS right = right_side
-    { EqualsEquals(left, right) }
-  | left = right_side NOT_EQUALS right = right_side
-    { NotEquals(left, right) }
-  | left = right_side AND right = right_side
-    { And(left, right) }
-  | left = right_side OR right = right_side
-    { Or(left, right) }
+  | literal = literals
+    { Literal(literal) }
+  | b = boolean
+    { BoolRHS b }
+  | c = collection
+    { c }
 
   exp:
   | left = left_side EQUALS right = exp
@@ -190,6 +253,12 @@ right_side:
     { RHS(rhs) }
   | rpc_call = rpc_call
     { RpcCallRHS(rpc_call) }
+
+for_loop:
+  | FOR LEFT_PAREN init = exp SEMICOLON cond = exp SEMICOLON update = exp RIGHT_PAREN LEFT_CURLY_BRACE
+    body = statements
+    RIGHT_CURLY_BRACE
+    { ForLoop(init, cond, update, body) }
 
 statement:
   | cond_stmts = cond_stmts

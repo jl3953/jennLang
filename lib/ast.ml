@@ -10,26 +10,29 @@ type lhs =
   | VarLHS of string
   | MapAccessLHS of string * string *)
 
+type boolean =
+| Bool of bool
+| Not of boolean
+| And of boolean * boolean
+| Or of boolean * boolean
+| EqualsEquals of rhs * rhs
+| NotEquals of rhs * rhs
+
 (* type rhs = *)
-type rhs = 
-  | Bool of bool
+and rhs = 
   | VarRHS of string
   | MapAccessRHS of string * string
   | FuncCallRHS of func_call
-  | DefValRHS of default_value
+  | Literal of literal 
   | FieldAccessRHS of rhs * string
-  | Not of rhs
-  | EqualsEquals of rhs * rhs
-  | NotEquals of rhs * rhs
-  | And of rhs * rhs
-  | Or of rhs * rhs
+  | Map of (string * rhs) list
+  | List of rhs list
+  | BoolRHS of boolean
 
 and param = Param of rhs 
 
-and default_value =
-  (* | Map of (default_value * default_value) list *)
+and literal = 
   | Options of option list
-  | EmptyMap
   | String of string
 
 and func_call = FuncCall of string * param list
@@ -48,7 +51,7 @@ and expr =
 
 
 (* list of condition to be evaluated * statement body, else condition is just true*)
-type cond_stmt = IfElseIf of rhs * statement list 
+type cond_stmt = IfElseIf of boolean * statement list 
 
 and statement =
   | CondList of cond_stmt list 
@@ -57,7 +60,7 @@ and statement =
 
 type func_def = FuncDef of func_call * type_def * statement list
 
-type var_init = VarInit of type_def * string * default_value
+type var_init = VarInit of type_def * string * rhs
 
 type role_def = RoleDef of string * param list * var_init list * func_def list
 

@@ -54,6 +54,7 @@ rule token = parse
   | '[' {LEFT_SQUARE_BRACKET}
   | ']' {RIGHT_SQUARE_BRACKET}
   | '.' {DOT}
+  | ':' {COLON}
   | ';' {SEMICOLON}
   | '"' {QUOTE}
   | "==" {EQUALS_EQUALS}
@@ -66,6 +67,8 @@ rule token = parse
   | "if" { IF }
   | "elseif" { ELSEIF }
   | "else" { ELSE }
+  | "for" { FOR }
+  | "in" { IN }
   | "map" { MAP }
   | "Options" { OPTIONS }
   | "return" { RETURN }
