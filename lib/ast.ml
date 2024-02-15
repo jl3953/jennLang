@@ -28,6 +28,11 @@ and rhs =
   | Map of (string * rhs) list
   | List of rhs list
   | BoolRHS of boolean
+  | CollectionRHS of collection_literal
+
+and collection_literal = 
+  | MapLit of (string * rhs) list
+  | ListLit of rhs list
 
 and param = Param of rhs 
 
@@ -49,6 +54,8 @@ and expr =
   | RHS of rhs 
   | RpcCallRHS of rpc_call
 
+type iterator = 
+  | Iterator of string * string
 
 (* list of condition to be evaluated * statement body, else condition is just true*)
 type cond_stmt = IfElseIf of boolean * statement list 
@@ -57,6 +64,7 @@ and statement =
   | CondList of cond_stmt list 
   | Expr of expr
   | Return of expr
+  | ForLoop of iterator * rhs * statement list
 
 type func_def = FuncDef of func_call * type_def * statement list
 

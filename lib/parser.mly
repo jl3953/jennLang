@@ -150,11 +150,17 @@ kv_pairs:
   | key = ID COLON value = right_side COMMA kvs = kv_pairs
     { (key, value)::kvs }
 
-map_expr:
-  | LEFT_CURLY_BRACE RIGHT_CURLY_BRACE
-    { Map([]) }
-  | LEFT_CURLY_BRACE kvs = kv_pairs RIGHT_CURLY_BRACE
-    { Map(kvs) } 
+// map_literals:
+//   | LEFT_CURLY_BRACE RIGHT_CURLY_BRACE
+//     { MapLit([]) }
+//   | LEFT_CURLY_BRACE kvs = kv_pairs RIGHT_CURLY_BRACE
+//     { MapLit(kvs) }
+
+// map_expr:
+//   | map_literals = map_literals
+//     { map_literals }
+//   | mapName = ID
+//     { MapID(mapName) }
 
 items:
   | rhs = right_side
@@ -162,17 +168,27 @@ items:
   | rhs = right_side COMMA rest = items
     { rhs :: rest }
 
-list_expr:
-  | LEFT_SQUARE_BRACKET RIGHT_SQUARE_BRACKET
-    { List([]) }
-  | LEFT_SQUARE_BRACKET items = items RIGHT_SQUARE_BRACKET
-    { List(items) }
+// list_literals:
+//   | LEFT_SQUARE_BRACKET RIGHT_SQUARE_BRACKET
+//     { List([]) }
+//   | LEFT_SQUARE_BRACKET items = items RIGHT_SQUARE_BRACKET
+//     { List(items) }
 
-collection:
-  | map_expr = map_expr
-    { map_expr }
-  | list_expr = list_expr
-    { list_expr }
+// list_expr:
+//   | list_literals = list_literals
+//     { list_literals }
+//   | listName = ID
+//     { ListID(listName) }
+
+collection_literal:
+  | LEFT_CURLY_BRACE RIGHT_CURLY_BRACE
+    { MapLit([]) }
+  | LEFT_CURLY_BRACE kvs = kv_pairs RIGHT_CURLY_BRACE
+    { MapLit(kvs) }
+  | LEFT_SQUARE_BRACKET RIGHT_SQUARE_BRACKET
+    { ListLit([]) }
+  | LEFT_SQUARE_BRACKET items = items RIGHT_SQUARE_BRACKET
+    { ListLit(items) }
   
 literals:
   | OPTIONS LEFT_PAREN opts = options RIGHT_PAREN
@@ -243,8 +259,8 @@ right_side:
     { Literal(literal) }
   | b = boolean
     { BoolRHS b }
-  | c = collection
-    { c }
+  | c = collection_literal
+    { CollectionRHS c }
 
   exp:
   | left = left_side EQUALS right = exp
@@ -254,11 +270,9 @@ right_side:
   | rpc_call = rpc_call
     { RpcCallRHS(rpc_call) }
 
-for_loop:
-  | FOR LEFT_PAREN init = exp SEMICOLON cond = exp SEMICOLON update = exp RIGHT_PAREN LEFT_CURLY_BRACE
-    body = statements
-    RIGHT_CURLY_BRACE
-    { ForLoop(init, cond, update, body) }
+iterator:
+  | key = ID COMMA value = ID
+    { Iterator(key, value) }
 
 statement:
   | cond_stmts = cond_stmts
@@ -267,6 +281,10 @@ statement:
     { Expr(e) }
   | RETURN e = exp SEMICOLON
     { Return(e) }
+  | FOR LEFT_PAREN it = iterator IN collection = right_side RIGHT_PAREN LEFT_CURLY_BRACE
+    body = statements
+    RIGHT_CURLY_BRACE
+    { ForLoop(it, collection, body) }
 
 params:
   | rhs = right_side

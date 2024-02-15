@@ -36,7 +36,7 @@ Node {
         if (role == "Tail") {
             role = "Mid";
             successor = tail;
-            rpc_call(tail, PropagateLogs(db));
+            rpc_call(tail, PropagateLogsToTail(db));
         }
 
         if (failed_node == tail) {
@@ -81,9 +81,11 @@ Node {
         tail = t;
     }
 
+    // Receiving dirty logs
     func PropagateDirtyLogs(dirty_logs) {
         diff_dirty_logs = {};
         for (key, value in range(dirty_logs)) {
+            // previous value is committed, hasn't seen new version yet.
             if (value != db[key] && true == is_committed[key]) {
                 db[key] = value;
                 diff_dirty_logs[key] = value;

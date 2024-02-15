@@ -338,28 +338,7 @@ let exec (state : state) (program : program) (record : record) =
       end
     | Return expr -> 
       print_endline "Return";
-      (* begin match expr with
-      | EVar v -> print_endline ("\tEVar " ^ v)
-      | EInt i -> print_endline ("\tEInt " ^ string_of_int i)
-      | EBool b -> print_endline ("\tEBool " ^ string_of_bool b)
-      | EFind (m, k) -> 
-        begin match k with
-        | EVar v -> print_endline ("\tEFind " ^ m ^ ", " ^ v)
-        | EInt i -> print_endline ("\tEFind " ^ m ^ ", " ^ string_of_int i)
-        | EBool b -> print_endline ("\tEFind " ^ m ^ ", " ^ string_of_bool b)
-        | EMap -> print_endline ("\tEFind " ^ m ^ ", EMap")
-        | EFind (_, _) -> print_endline ("\tEFind " ^ m ^ ", EFind ")
-        | EString s -> print_endline ("\tEString " ^ s)
-        end
-      | EMap -> print_endline ("\tEMap");
-      | EString s -> print_endline ("\tEString " ^ s)
-      end; *)
       record.continuation (eval env expr)
-    (*| Read -> print_endline "Read";
-      let expr = match Env.find record.env "key" with
-        | VString s -> EVar s
-        | _ -> failwith "Type error!" in 
-      record.continuation(eval env expr)*)
     | Pause next -> 
       (* print_endline "Pause"; *)
       record.pc <- next;
