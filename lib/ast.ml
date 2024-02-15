@@ -43,7 +43,9 @@ and literal =
 
 and func_call = FuncCall of string * param list
 
-and rpc_call = RpcCall of string * func_call
+and rpc_call = 
+  | RpcCall of string * func_call
+  | RpcAsyncCall of string * func_call
 
 and lhs = 
   | VarLHS of string
@@ -59,7 +61,7 @@ type iterator =
   | Iterator of string * string
 
 (* list of condition to be evaluated * statement body, else condition is just true*)
-type cond_stmt = IfElseIf of boolean * statement list 
+type cond_stmt = IfElseIf of rhs * statement list 
 
 and statement =
   | CondList of cond_stmt list 
@@ -67,6 +69,7 @@ and statement =
   | Return of expr
   | ForLoop of iterator * rhs * statement list
   | Comment
+  | Await of boolean
 
 type func_def = FuncDef of func_call * type_def * statement list
 

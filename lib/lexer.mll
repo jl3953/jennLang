@@ -39,11 +39,16 @@ let id = ['a'-'z' 'A'-'Z' '_'] ['a'-'z' 'A'-'Z' '0'-'9' '_']*
 let digit = ['0'-'9']
 let integer = digit+
 
+rule comment = parse
+  | "*/" { token lexbuf }
+  | _ { comment lexbuf }
 
-rule token = parse 
+
+and token = parse 
   | white { token lexbuf }
   | newline { next_line lexbuf; token lexbuf }
-  | "//" [^ '\n']* { token lexbuf }
+  | "//" [^ '\n']* { token lexbuf } (* ignore comments *)
+  | "/*" { comment lexbuf }
   | "->" { ARROW }
   | ',' { COMMA }
   | '=' { EQUALS }
@@ -65,17 +70,19 @@ rule token = parse
   | "!=" {NOT_EQUALS}
   | "&&" {AND}
   | "||" {OR}
+  | "await" { AWAIT }
   | "true" { TRUE true }
   | "false" { FALSE false }
   | "func" { FUNC }
   | "if" { IF }
-  | "elseif" { ELSEIF }
+  | "else if" { ELSEIF }
   | "else" { ELSE }
   | "for" { FOR }
   | "in" { IN }
   | "map" { MAP }
   | "Options" { OPTIONS }
   | "return" { RETURN }
+  | "rpc_async_call" { RPC_ASYNC_CALL}
   | "rpc_call" { RPC_CALL }
   | "ClientInterface" { CLIENT_INTERFACE }
   | id as s { ID s }

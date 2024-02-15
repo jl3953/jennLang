@@ -8,6 +8,7 @@
 %token <int> INT
 %token AND
 %token ARROW
+%token AWAIT
 %token BANG
 %token CLIENT_INTERFACE
 %token COLON
@@ -28,6 +29,7 @@
 %token OR
 %token DOT
 %token RETURN
+%token RPC_ASYNC_CALL
 %token RPC_CALL
 %token SEMICOLON
 %token QUOTE
@@ -36,7 +38,7 @@
 %left BANG
 // %left AND
 // %left OR
-%left EQUALS_EQUALS NOT_EQUALS
+%nonassoc EQUALS_EQUALS NOT_EQUALS 
 
 %type <Ast.prog> program
 
@@ -77,17 +79,17 @@ statements:
     { s :: ss }
 
 if_stmt:
-  | IF LEFT_PAREN cond = boolean RIGHT_PAREN LEFT_CURLY_BRACE 
+  | IF LEFT_PAREN cond = right_side RIGHT_PAREN LEFT_CURLY_BRACE 
     body = statements
     RIGHT_CURLY_BRACE
     { IfElseIf (cond, body) }
 
 elseif_stmts:
-  | ELSEIF LEFT_PAREN cond = boolean RIGHT_PAREN LEFT_CURLY_BRACE 
+  | ELSEIF LEFT_PAREN cond = right_side RIGHT_PAREN LEFT_CURLY_BRACE 
     body = statements
     RIGHT_CURLY_BRACE
     { IfElseIf(cond, body) :: []}
-  | ELSEIF LEFT_PAREN cond = boolean RIGHT_PAREN LEFT_CURLY_BRACE 
+  | ELSEIF LEFT_PAREN cond = right_side RIGHT_PAREN LEFT_CURLY_BRACE 
     body = statements
     RIGHT_CURLY_BRACE el = elseif_stmts
     { IfElseIf(cond, body) :: el}
@@ -100,17 +102,21 @@ cond_stmts:
   | i = if_stmt ELSE LEFT_CURLY_BRACE
     else_body = statements
     RIGHT_CURLY_BRACE
-    { i :: [IfElseIf(Bool(true), else_body)] }
+    { i :: [IfElseIf(BoolRHS(Bool(true)), else_body)] }
   | i = if_stmt el = elseif_stmts ELSE LEFT_CURLY_BRACE
     else_body = statements
     RIGHT_CURLY_BRACE
-    { i :: el @ [IfElseIf(Bool(true), else_body)] }
+    { i :: el @ [IfElseIf(BoolRHS(Bool(true)), else_body)] }
 
 rpc_call:
   | RPC_CALL LEFT_PAREN host = ID COMMA func_call = func_call RIGHT_PAREN
     { RpcCall(host, func_call) }
   | RPC_CALL LEFT_PAREN QUOTE host = ID QUOTE COMMA func_call = func_call RIGHT_PAREN
     { RpcCall(host, func_call) }
+  | RPC_ASYNC_CALL LEFT_PAREN host = ID COMMA func_call = func_call RIGHT_PAREN
+    { RpcAsyncCall(host, func_call) }
+  | RPC_ASYNC_CALL LEFT_PAREN QUOTE host = ID QUOTE COMMA func_call = func_call RIGHT_PAREN
+    { RpcAsyncCall(host, func_call) }
 
 type_def:
   | id = ID
@@ -186,11 +192,15 @@ boolean:
     { b }
   | BANG rhs = right_side
     { Not rhs }
+  // | b1 = boolean AND b2 = boolean
+  //   { And (b1, b2) }
   | b1 = bool_lit AND b2 = bool_lit
     { And (b1, b2) }
   | b1 = bool_lit AND LEFT_PAREN b2 = boolean RIGHT_PAREN
     { And (b1, b2) }
   | LEFT_PAREN b1 = boolean RIGHT_PAREN AND b2 = bool_lit 
+    { And (b1, b2) }
+  | LEFT_PAREN b1 = boolean RIGHT_PAREN AND LEFT_PAREN b2 = boolean RIGHT_PAREN
     { And (b1, b2) }
   | b1 = bool_lit OR b2 = bool_lit
     { Or (b1, b2) }
@@ -244,6 +254,8 @@ statement:
     body = statements
     RIGHT_CURLY_BRACE
     { ForLoop(it, collection, body) }
+  | AWAIT b = boolean SEMICOLON
+    { Await(b) }
 
 params:
   | rhs = right_side
@@ -257,11 +269,11 @@ role_def:
     func_defs = func_defs
     RIGHT_CURLY_BRACE
     { RoleDef(id, [], var_inits, func_defs) }
-  | id = ID LEFT_PAREN params = params RIGHT_PAREN LEFT_CURLY_BRACE
-    var_inits = var_inits
-    func_defs = func_defs
-    RIGHT_CURLY_BRACE
-    { RoleDef(id, params, var_inits, func_defs) }
+  // | id = ID LEFT_PAREN params = params RIGHT_PAREN LEFT_CURLY_BRACE
+  //   var_inits = var_inits
+  //   func_defs = func_defs
+  //   RIGHT_CURLY_BRACE
+  //   { RoleDef(id, params, var_inits, func_defs) }
 
 client_def:
   | CLIENT_INTERFACE LEFT_CURLY_BRACE
