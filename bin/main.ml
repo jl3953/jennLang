@@ -1,6 +1,6 @@
 open Mylib.Ast
 open Mylib
-open Mylib.Simulator
+(* open Mylib.Simulator *)
 
 let parse_file (filename : string) : prog =
   let ic = open_in filename in
@@ -8,7 +8,7 @@ let parse_file (filename : string) : prog =
   let ast = Parser.program Lexer.token lexbuf in
   close_in ic;
   ast
-
+(* 
 let roleNames = ["Head"; "Mid"; "Mid2"; "Mid3"; "Tail"]
 (* let roleNames = ["Head"] *)
 let topology_config = Env.create (List.length roleNames)
@@ -242,9 +242,10 @@ let processProgram (prog : prog) : program =
       ; rpc = rpcCalls
       ; client_ops = clientCalls } in
     myProgram
+*)
 
 let interp (f : string) : unit =
-  let globalState = 
+(*  let globalState = 
       { nodes = Array.init 8 (fun _ -> Env.create 91)  (* Replace 10 with the desired number of nodes *)
       ; records = []
       ; history = DA.create ()  (* Assuming DA.create creates an empty dynamic array *)
@@ -256,11 +257,10 @@ let interp (f : string) : unit =
       let node_map = globalState.nodes.(node) in
       Env.add node_map roleName (topology_config roleName);
     done;
-  done;
+  done; *)
   (* Load the program into the simulator *)
-  let myProgram = 
-    let ast = parse_file f 
-  in processProgram ast in
+  let _ = parse_file f in ();;
+  (* in processProgram ast in
   print_endline "attempt to execute init...";
   List.iter (fun roleName -> 
     schedule_client globalState myProgram ("init_" ^ roleName) [];
@@ -335,14 +335,14 @@ let interp (f : string) : unit =
       op.payload
     ; Printf.fprintf oc "\n"
     ) globalState.history;
-    print_global_nodes globalState.nodes;
-  ;;
+    print_global_nodes globalState.nodes; *)
+  (* ;; *)
 
 (* When changing config, remember to:
 1. change roleNames variable
 2. change the number of nodes in global state
 3. change the client idx
 *)
-interp "/Users/jenniferlam/jennLang/bin/CRAQ.jenn"
+interp "/home/jennifer/jennLang/bin/CRAQ.jenn"
 let () = print_endline "Program recognized as valid!"
 let () = print_endline "Program ran successfully!"

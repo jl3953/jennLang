@@ -36,14 +36,18 @@
 let white = [' ' '\t']+
 let newline = '\r' | '\n' | "\r\n"
 let id = ['a'-'z' 'A'-'Z' '_'] ['a'-'z' 'A'-'Z' '0'-'9' '_']*
+let digit = ['0'-'9']
+let integer = digit+
 
 
 rule token = parse 
   | white { token lexbuf }
   | newline { next_line lexbuf; token lexbuf }
+  | "//" [^ '\n']* { token lexbuf }
   | "->" { ARROW }
   | ',' { COMMA }
   | '=' { EQUALS }
+  | integer as i { INT (int_of_string i)}
   | '<' {LEFT_ANGLE_BRACKET}
   | '>' {RIGHT_ANGLE_BRACKET}
   | '!' {BANG}

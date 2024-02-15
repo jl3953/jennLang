@@ -12,7 +12,7 @@ type lhs =
 
 type boolean =
 | Bool of bool
-| Not of boolean
+| Not of rhs
 | And of boolean * boolean
 | Or of boolean * boolean
 | EqualsEquals of rhs * rhs
@@ -39,6 +39,7 @@ and param = Param of rhs
 and literal = 
   | Options of option list
   | String of string
+  | Int of int
 
 and func_call = FuncCall of string * param list
 
@@ -65,6 +66,7 @@ and statement =
   | Expr of expr
   | Return of expr
   | ForLoop of iterator * rhs * statement list
+  | Comment
 
 type func_def = FuncDef of func_call * type_def * statement list
 

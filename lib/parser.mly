@@ -5,6 +5,7 @@
 
 %token <string> ID
 %token <bool> TRUE FALSE
+%token <int> INT
 %token AND
 %token ARROW
 %token BANG
@@ -32,33 +33,12 @@
 %token QUOTE
 %token EOF
 
-// %left BANG
+%left BANG
 // %left AND
 // %left OR
 %left EQUALS_EQUALS NOT_EQUALS
 
 %type <Ast.prog> program
-// %type <if_stmt> if_stmt
-// %type <elseif_stmts> elseif_stmts
-// %type <exp> exp
-// %type <func_call> func_call
-// %type <left_side> left_side
-// %type <right_side> right_side
-// %type <map_expr> map_expr
-// %type <statement> statement
-// %type <params> params
-// %type <role_def> role_def
-// %type <Ast.prog> statements
-// %type <Ast.rpc_call> rpc_call
-// %type <Ast.func_def> func_def
-// %type <Ast.func_defs> func_defs
-//%type <var_inits> var_inits
-// %type <Ast.type_def> type_def
-// %type <Ast.default_val> default_val
-// %type <cond_stmts> cond_stmts
-// %type <var_init> var_init
-// %type <assignment_expr> assignment_expr
-
 
 %start program
 
@@ -114,7 +94,7 @@ elseif_stmts:
 
 cond_stmts:
   | i = if_stmt
-    {i :: []}
+    { i :: []}
   | i = if_stmt el = elseif_stmts
     { i :: el }
   | i = if_stmt ELSE LEFT_CURLY_BRACE
@@ -150,35 +130,12 @@ kv_pairs:
   | key = ID COLON value = right_side COMMA kvs = kv_pairs
     { (key, value)::kvs }
 
-// map_literals:
-//   | LEFT_CURLY_BRACE RIGHT_CURLY_BRACE
-//     { MapLit([]) }
-//   | LEFT_CURLY_BRACE kvs = kv_pairs RIGHT_CURLY_BRACE
-//     { MapLit(kvs) }
-
-// map_expr:
-//   | map_literals = map_literals
-//     { map_literals }
-//   | mapName = ID
-//     { MapID(mapName) }
 
 items:
   | rhs = right_side
     { rhs :: [] }
   | rhs = right_side COMMA rest = items
     { rhs :: rest }
-
-// list_literals:
-//   | LEFT_SQUARE_BRACKET RIGHT_SQUARE_BRACKET
-//     { List([]) }
-//   | LEFT_SQUARE_BRACKET items = items RIGHT_SQUARE_BRACKET
-//     { List(items) }
-
-// list_expr:
-//   | list_literals = list_literals
-//     { list_literals }
-//   | listName = ID
-//     { ListID(listName) }
 
 collection_literal:
   | LEFT_CURLY_BRACE RIGHT_CURLY_BRACE
@@ -195,6 +152,10 @@ literals:
     { Options(opts) }
   | QUOTE s = ID QUOTE
     { String(s) }
+  | QUOTE QUOTE
+    { String("") }
+  | i = INT
+    { Int(i) }
 
 var_init:
   | typ = type_def id = ID EQUALS right_side = right_side
@@ -223,10 +184,8 @@ bool_lit:
 boolean:
   | b = bool_lit
     { b }
-  | BANG bool_lit = bool_lit
-    { Not bool_lit }
-  | BANG LEFT_PAREN b = boolean RIGHT_PAREN
-    { Not b}
+  | BANG rhs = right_side
+    { Not rhs }
   | b1 = bool_lit AND b2 = bool_lit
     { And (b1, b2) }
   | b1 = bool_lit AND LEFT_PAREN b2 = boolean RIGHT_PAREN
@@ -238,6 +197,8 @@ boolean:
   | b1 = bool_lit OR LEFT_PAREN b2 = boolean RIGHT_PAREN
     { Or (b1, b2) }
   | LEFT_PAREN b1 = boolean RIGHT_PAREN OR b2 = bool_lit
+    { Or (b1, b2) }
+  | LEFT_PAREN b1 = boolean RIGHT_PAREN OR LEFT_PAREN b2 = boolean RIGHT_PAREN
     { Or (b1, b2) }
   | rhs1 = right_side EQUALS_EQUALS rhs2 = right_side
     { EqualsEquals (rhs1, rhs2)}
@@ -251,8 +212,6 @@ right_side:
     { VarRHS(id) }
   | mapName = ID LEFT_SQUARE_BRACKET key = ID RIGHT_SQUARE_BRACKET
     { MapAccessRHS(mapName, key) }
-  // | rhs = right_side DOT key = ID
-  //   { FieldAccessRHS(rhs, key) }
   | func_call = func_call
     { FuncCallRHS(func_call)}
   | literal = literals
@@ -262,7 +221,7 @@ right_side:
   | c = collection_literal
     { CollectionRHS c }
 
-  exp:
+exp:
   | left = left_side EQUALS right = exp
     { Assignment(left, right)}
   | rhs = right_side  
