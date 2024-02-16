@@ -36,8 +36,8 @@
 %token EOF
 
 %left BANG
-// %left AND
-// %left OR
+%left AND
+%left OR
 %nonassoc EQUALS_EQUALS NOT_EQUALS 
 
 %type <Ast.prog> program
@@ -181,35 +181,41 @@ left_side:
   | rhs = right_side DOT key = ID
     { FieldAccessLHS(rhs, key) } 
 
-bool_lit:
-  | TRUE
+// bool_lit:
+//   | TRUE
+//     { Bool true }
+//   | FALSE
+//     { Bool false }
+
+boolean:
+  // | b = bool_lit
+  //   { b }
+  | TRUE 
     { Bool true }
   | FALSE
     { Bool false }
-
-boolean:
-  | b = bool_lit
-    { b }
   | BANG rhs = right_side
     { Not rhs }
-  // | b1 = boolean AND b2 = boolean
+  | b1 = right_side AND b2 = right_side
+    { And (b1, b2) }
+  // | b1 = bool_lit AND b2 = bool_lit
   //   { And (b1, b2) }
-  | b1 = bool_lit AND b2 = bool_lit
-    { And (b1, b2) }
-  | b1 = bool_lit AND LEFT_PAREN b2 = boolean RIGHT_PAREN
-    { And (b1, b2) }
-  | LEFT_PAREN b1 = boolean RIGHT_PAREN AND b2 = bool_lit 
-    { And (b1, b2) }
-  | LEFT_PAREN b1 = boolean RIGHT_PAREN AND LEFT_PAREN b2 = boolean RIGHT_PAREN
-    { And (b1, b2) }
-  | b1 = bool_lit OR b2 = bool_lit
+  // | b1 = bool_lit AND LEFT_PAREN rhs2 = right_side RIGHT_PAREN
+  //   { And (b1, rhs2) }
+  // | LEFT_PAREN rhs1 = right_side RIGHT_PAREN AND b2 = bool_lit 
+  //   { And (rhs1, b2) }
+  // | LEFT_PAREN rhs1 = right_side RIGHT_PAREN AND LEFT_PAREN rhs2 = right_side RIGHT_PAREN
+  //   { And (rhs1, rhs2) }
+  | b1 = right_side OR b2 = right_side
     { Or (b1, b2) }
-  | b1 = bool_lit OR LEFT_PAREN b2 = boolean RIGHT_PAREN
-    { Or (b1, b2) }
-  | LEFT_PAREN b1 = boolean RIGHT_PAREN OR b2 = bool_lit
-    { Or (b1, b2) }
-  | LEFT_PAREN b1 = boolean RIGHT_PAREN OR LEFT_PAREN b2 = boolean RIGHT_PAREN
-    { Or (b1, b2) }
+  // | b1 = bool_lit OR b2 = bool_lit
+  //   { Or (b1, b2) }
+  // | b1 = bool_lit OR LEFT_PAREN rhs2=right_side RIGHT_PAREN
+  //   { Or (b1, rhs2) }
+  // | LEFT_PAREN rhs1 = right_side RIGHT_PAREN OR b2 = bool_lit
+  //   { Or (rhs1, b2) }
+  // | LEFT_PAREN rhs1 = right_side RIGHT_PAREN OR LEFT_PAREN rhs2=right_side RIGHT_PAREN
+  //   { Or (rhs1, rhs2) }
   | rhs1 = right_side EQUALS_EQUALS rhs2 = right_side
     { EqualsEquals (rhs1, rhs2)}
   | rhs1 = right_side NOT_EQUALS rhs2 = right_side

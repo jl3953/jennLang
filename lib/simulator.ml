@@ -32,7 +32,8 @@ type expr =
   | EAnd of expr * expr
   | EOr of expr * expr
   | EEqualsEquals of expr * expr
-  | EMap
+  | EMap of (string * expr) list
+  | EList of expr list
   | EString of string
 [@@deriving ord]
 
@@ -62,6 +63,7 @@ type value =
   | VInt of int
   | VBool of bool
   | VMap of (value, value) Hashtbl.t
+  | VList of value list
   | VOption of (value option)
   | VFuture of (value option) ref
   | VNode of int
@@ -178,10 +180,45 @@ let rec eval (env : record_env) (expr : expr) : value =
       | VMap map -> Hashtbl.find map (eval env k)
       | _ -> failwith "Type error!"
     end
-  | EMap -> 
-    (* print_endline "EMap"; *)
-    let map = Hashtbl.create 91 in
-    VMap map
+  | ENot e -> 
+    begin match eval env e with
+      | VBool b -> VBool (not b)
+      | _ -> failwith "Type error!"
+    end
+  | EAnd (e1, e2) ->
+    begin match eval env e1, eval env e2 with
+      | VBool b1, VBool b2 -> VBool (b1 && b2)
+      | _ -> failwith "Type error!"
+    end
+  | EOr (e1, e2) ->
+    begin match eval env e1, eval env e2 with
+      | VBool b1, VBool b2 -> VBool (b1 || b2)
+      | _ -> failwith "Type error!"
+    end
+  | EEqualsEquals (e1, e2) ->
+    begin match eval env e1, eval env e2 with
+      | VInt i1, VInt i2 -> VBool (i1 = i2)
+      | VBool b1, VBool b2 -> VBool (b1 = b2)
+      | VString s1, VString s2 -> VBool (s1 = s2)
+      | _ -> failwith "Type error!"
+    end
+  | EMap kvpairs -> 
+    let rec makemap (kvpairs : (string * expr) list) : (value, value) Hashtbl.t =
+      begin match kvpairs with
+      | [] -> Hashtbl.create 91
+      | (k, v) :: rest ->
+        let tbl = makemap rest in
+        Hashtbl.add (makemap rest) (VString k) (eval env v); 
+        tbl
+      end in 
+      VMap (makemap kvpairs)
+  | EList exprs ->
+    let rec makelist (exprs : expr list) : value list =
+      begin match exprs with
+      | [] -> []
+      | e :: rest -> (eval env e) :: (makelist rest)
+      end in
+      VList (makelist exprs)
   | EString s -> 
     (* print_endline ("VString " ^ s);  *)
     VString s
@@ -273,6 +310,7 @@ let exec (state : state) (program : program) (record : record) =
             | VBool _ -> failwith "Type error bool"
             | VInt _ -> failwith "Type error int"
             | VMap _ -> failwith "Type error map"
+            | VList _ -> failwith "Type error list"
             | VOption _ -> failwith "Type error option"
             | VFuture _ -> failwith "Type error future"
             | VString role -> 

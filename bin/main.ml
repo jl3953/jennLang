@@ -34,10 +34,17 @@ let rec convert_rhs (rhs : rhs) : Simulator.expr =
   | BoolRHS boolean ->
     begin match boolean with
     | Bool b -> EBool(b)
-    | Not rhs -> ENot(convert_rhs rhs)
+    | Not rhs -> ENot (convert_rhs rhs)
+    | Or (rhs1, rhs2) -> EOr(convert_rhs rhs1, convert_rhs rhs2)
     | And (b1, b2) -> EAnd(convert_rhs b1, convert_rhs b2)
+    | EqualsEquals (rhs1, rhs2) -> EEqualsEquals(convert_rhs rhs1, convert_rhs rhs2)
+    | NotEquals (b1, b2) -> ENot(EEqualsEquals(convert_rhs b1, convert_rhs b2))
     end 
-  | CollectionRHS collection_literal -> failwith "Didn't implement this rhs yet"
+  | CollectionRHS collection_lit ->
+    begin match collection_lit with
+    | MapLit kvpairs -> EMap (List.map (fun (k, v) -> (k, convert_rhs v)) kvpairs);
+    | ListLit items -> EList (List.map (fun (v) -> convert_rhs v) items)
+    end
 
 let rec generate_cfg_from_stmts (stmts : statement list) (cfg : CFG.t) (last_vert : CFG.vertex) : CFG.vertex =
   match stmts with
@@ -49,11 +56,16 @@ let rec generate_cfg_from_stmts (stmts : statement list) (cfg : CFG.t) (last_ver
         let next = generate_cfg_from_stmts rest cfg last_vert in
         generate_cfg_from_cond_stmts cond_stmts cfg next
       end
-    | Expr (_) -> failwith "Not implemented"
-    | Return (_) -> failwith "Not implemented"
-    | ForLoop (_) -> failwith "Not implemented"
+    | Expr expr -> 
+      begin match expr with
+      | Assignment _ -> failwith "Not implemented assignment"
+      | RHS _ -> failwith "Not implemented rhs"
+      | RpcCallRHS _ -> failwith "Not implemented rpc call"
+      end
+    | Return (_) -> failwith "Not implemented return"
+    | ForLoop (_) -> failwith "Not implemented for loop"
     | Comment -> generate_cfg_from_stmts rest cfg last_vert
-    | Await (_) -> failwith "Not implemented"
+    | Await (_) -> failwith "Not implemented await"
     end
 
 and generate_cfg_from_cond_stmts (cond_stmts : cond_stmt list) (cfg : CFG.t) (next : CFG.vertex) : CFG.vertex =
@@ -173,6 +185,6 @@ let interp (f : string) : unit =
   print_endline "Program recognized as valid!";
 ;;
   
-interp "/home/jennifer/jennLang/bin/CRAQ.jenn"
+interp "/Users/jenniferlam/jennLang/bin/CRAQ.jenn"
 let () = print_endline "Program recognized as valid!"
 let () = print_endline "Program ran successfully!"

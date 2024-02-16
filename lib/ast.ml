@@ -13,8 +13,8 @@ type lhs =
 type boolean =
 | Bool of bool
 | Not of rhs
-| And of boolean * boolean
-| Or of boolean * boolean
+| And of rhs * rhs
+| Or of rhs * rhs
 | EqualsEquals of rhs * rhs
 | NotEquals of rhs * rhs
 
