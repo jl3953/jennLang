@@ -79,4 +79,4 @@ type role_def = RoleDef of string * param list * var_init list * func_def list
 
 type client_def = ClientDef of func_def list
 
-type prog = Prog of role_def list * client_def
+type prog = Prog of role_def * client_def

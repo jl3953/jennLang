@@ -48,10 +48,10 @@
 
 program:
   | r = role_def c = client_def EOF
-    { Prog(r::[], c) }
-  | r = role_def p = program
-    { match p with
-      | Prog(roles, client) -> Prog(r::roles, client)}
+    { Prog(r, c) }
+  // | r = role_def p = program
+  //   { match p with
+  //     | Prog(roles, client) -> Prog(r::roles, client)}
 
   
 func_call: 

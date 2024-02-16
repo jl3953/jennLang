@@ -86,12 +86,17 @@ Node {
         //}
     }
     
-    func Init(assigned_role, pred, succ, h, t) -> none {
+    func Init(assigned_role, pred, succ, h, t, data) -> none {
         role = assigned_role;
         predecessor = pred;
         successor = succ;
         head = h;
         tail = t;
+        db = {};
+
+        for (key, value in range(data)) {
+            db[key] = value;
+        }
     }
 
     // Receiving dirty logs
@@ -143,5 +148,17 @@ ClientInterface {
 
 	func triggerFailover(dest, failed_node, new_tail) -> none {
         rpc_call(dest, TriggerFailover(failed_node, new_tail));
+    }
+
+    func init_head(dest, succ, t, data) -> none {
+        rpc_call(dest, Init("Head", none, succ, dest, t, data));
+    }
+
+    func init_tail(dest, pred, h, data) -> none {
+        rpc_call(dest, Init("Tail", pred, none, h, dest, data));
+    }
+
+    func init_mid(dest, pred, succ, h, t, data) -> none {
+        rpc_call(dest, Init("Mid", pred, succ, h, t, data));
     }
 }
