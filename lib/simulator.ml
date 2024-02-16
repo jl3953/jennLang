@@ -28,6 +28,10 @@ type expr =
   | EFind of string * expr
   | EInt of int
   | EBool of bool
+  | ENot of expr
+  | EAnd of expr * expr
+  | EOr of expr * expr
+  | EEqualsEquals of expr * expr
   | EMap
   | EString of string
 [@@deriving ord]

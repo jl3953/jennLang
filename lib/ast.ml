@@ -25,8 +25,6 @@ and rhs =
   | FuncCallRHS of func_call
   | Literal of literal 
   | FieldAccessRHS of rhs * string
-  | Map of (string * rhs) list
-  | List of rhs list
   | BoolRHS of boolean
   | CollectionRHS of collection_literal
 
