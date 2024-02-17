@@ -66,36 +66,42 @@ let rec generate_cfg_from_stmts (stmts : statement list) (cfg : CFG.t) (last_ver
     | Expr expr -> 
       begin match expr with
       | Assignment (lhs, exp) -> 
+        let lhs_vert = CFG.create_vertex cfg (Instr(Assign(convert_lhs lhs, EVar "ret"), next_vert)) in
         begin match exp with
-        | RHS(rhs) -> 
-          CFG.create_vertex cfg (Instr(Assign(convert_lhs lhs, convert_rhs rhs), next_vert))
-        | RpcCallRHS(rpc_call) ->
-            begin match rpc_call with
-            | RpcCall(node, func_call) -> 
-              begin match func_call with
-              | FuncCall(func_name, actuals) -> 
-                let actuals = List.map (fun actual -> 
-                  match actual with Param(rhs) -> convert_rhs rhs
-                  ) actuals in
-                let assign_vert = CFG.create_vertex cfg (Instr(Assign(convert_lhs lhs, EVar "dontcare"), next_vert)) in
-                let await_vertex = CFG.create_vertex cfg (Await(LVar("dontcare"), EVar "async_future", assign_vert)) in
-                CFG.create_vertex cfg (Instr(Async(LVar("async_future"), EVar node, func_name, actuals), await_vertex))
-              end
-            | RpcAsyncCall (node, func_call) -> 
-              begin match func_call with
-              | FuncCall(func_name, actuals) ->
-                let actuals = List.map (fun actual -> 
-                  match actual with Param(rhs) -> convert_rhs rhs
-                  ) actuals in
-                CFG.create_vertex cfg (Instr(Async(LVar("async_future"), EVar node, func_name, actuals), next_vert))
-              end
-            end
-        | Assignment(_, _) -> failwith "Don't assign an Assignment"
+        | Assignment _ -> failwith "Don't assign an Assignment"
+        | RHS _
+        | RpcCallRHS _ -> generate_cfg_from_stmts [Expr exp] cfg lhs_vert
         end
-      | RHS _ -> failwith "Not implemented rhs"
-      | RpcCallRHS _ -> failwith "Not implemented rpc call"
+      | RHS rhs -> CFG.create_vertex cfg (Instr(Assign(LVar "ret", convert_rhs rhs), next_vert))
+      | RpcCallRHS rpc_call -> 
+        begin match rpc_call with
+          | RpcCall(node, func_call) -> 
+            begin match func_call with
+            | FuncCall(func_name, actuals) -> 
+              let actuals = List.map (fun actual -> 
+                match actual with Param(rhs) -> convert_rhs rhs
+                ) actuals in
+              let assign_vert = CFG.create_vertex cfg (Instr(Assign(LVar "ret", EVar "dontcare"), next_vert)) in
+              let await_vertex = CFG.create_vertex cfg (Await(LVar("dontcare"), EVar "async_future", assign_vert)) in
+              CFG.create_vertex cfg (Instr(Async(LVar "async_future", EVar node, func_name, actuals), await_vertex))
+            end
+          | RpcAsyncCall (node, func_call) -> 
+            begin match func_call with
+            | FuncCall(func_name, actuals) ->
+              let actuals = List.map (fun actual -> 
+                match actual with Param(rhs) -> convert_rhs rhs
+                ) actuals in
+                CFG.create_vertex cfg (Instr(Async(LVar "ret", EVar node, func_name, actuals), next_vert))
+            end
+          end
       end
-    | Return (_) -> failwith "Not implemented return"
+    | Return exp -> 
+      let ret_vert = CFG.create_vertex cfg (Return (EVar "ret")) in
+      begin match exp with
+      | Assignment _ -> failwith "Don't Return an Assignment"
+      | RHS _
+      | RpcCallRHS _ -> generate_cfg_from_stmts [Expr exp] cfg ret_vert
+      end
     | ForLoop (_) -> failwith "Not implemented for loop"
     | Comment -> generate_cfg_from_stmts rest cfg last_vert
     | Await (_) -> failwith "Not implemented await"
@@ -134,8 +140,30 @@ let process_func_def (func_def : func_def) (cfg : CFG.t) : function_info =
       }
     end
 
-let process_role (_ : role_def) (_ : CFG.t) : function_info list = 
-  []
+let rec process_inits (inits : var_init list) (cfg : CFG.t) : CFG.vertex =
+  match inits with 
+  | [] -> CFG.create_vertex cfg (Return(EBool true))
+  | init :: rest -> 
+    let next_vert = process_inits rest cfg in
+    begin match init with
+    | VarInit(_, var_name, rhs) -> 
+      CFG.create_vertex cfg (Instr(Assign(LVar var_name, convert_rhs rhs), next_vert))
+    end
+
+let process_role (role_def : role_def) (cfg : CFG.t) : function_info list = 
+  match role_def with
+  | RoleDef(_, _, inits, func_defs) -> 
+    let init_vert = process_inits inits cfg
+    and init_func_name = "BASE_NODE_INIT" in
+    let init_func_info = 
+      { entry = init_vert
+      ; name = init_func_name
+      ; formals = []
+      ; locals = []
+      } 
+    and func_infos = List.map (fun func_def -> process_func_def func_def cfg) func_defs in
+    init_func_info :: func_infos
+
 
 let process_client_intf (client_intf: client_def) (cfg : CFG.t) : function_info list = 
   match client_intf with
@@ -218,6 +246,6 @@ let interp (f : string) : unit =
   print_endline "Program recognized as valid!";
 ;;
   
-interp "/Users/jenniferlam/jennLang/bin/CRAQ.jenn"
+interp "/home/jennifer/jennLang/bin/CRAQ.jenn"
 let () = print_endline "Program recognized as valid!"
 let () = print_endline "Program ran successfully!"

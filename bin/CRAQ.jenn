@@ -38,52 +38,34 @@ Node {
     }
     
     func TriggerFailover(failed_node, failed_node_pred, failed_node_succ, new_tail) -> none {
-        /*tail = new_tail;
+        if (failed_node == successor) {
+            successor = failed_node_succ;
+            dirty_logs = {};
+            for (key, committed in range(is_committed)) {
+                if (!committed) {
+                    dirty_logs[key] = db[key];
+                }
+            }
+            rpc_call(successor, PropagateDirtyLogs(dirty_logs));
+        }
+        
+        if (failed_node == predecessor) {
+            predecessor = failed_node_pred;
+            clean_logs = {};
+            for (key, committed in range(is_committed)) {
+                if (committed) {
+                    clean_logs[key] = db[key];
+                }
+            }
+            rpc_call(predecessor, BackPropagateCleanLogs(clean_logs));
+        }
+
+        tail = new_tail;
         if (role == "Tail") {
             role = "Mid";
             successor = tail;
             rpc_call(tail, PropagateLogsToTail(db));
         }
-
-        if (failed_node == tail) {
-            if (successor == failed_node) {
-                successor = new_tail;
-                rpc_call(tail, PropagateLogsToTail(db));
-            } 
-        } else if (failed_node == head) {
-            if (predecessor == failed_node) {
-                role = "Head";
-            }
-        } else {*/
-            if (failed_node == successor) {
-                successor = failed_node_succ;
-                dirty_logs = {};
-                for (key, committed in range(is_committed)) {
-                    if (!committed) {
-                        dirty_logs[key] = db[key];
-                    }
-                }
-                rpc_call(successor, PropagateDirtyLogs(dirty_logs));
-            }
-        
-            if (failed_node == predecessor) {
-                predecessor = failed_node_pred;
-                clean_logs = {};
-                for (key, committed in range(is_committed)) {
-                    if (committed) {
-                        clean_logs[key] = db[key];
-                    }
-                }
-                rpc_call(predecessor, BackPropagateCleanLogs(clean_logs));
-            }
-
-            tail = new_tail;
-            if (role == "Tail") {
-                role = "Mid";
-                successor = tail;
-                rpc_call(tail, PropagateLogsToTail(db));
-            }
-        //}
     }
     
     func Init(assigned_role, pred, succ, h, t, data) -> none {
