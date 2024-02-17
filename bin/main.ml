@@ -19,6 +19,12 @@ let global_state =
       ; history = DA.create () 
       ; free_clients = List.init num_clients (fun i -> num_servers + i) }
 
+let convert_lhs(lhs : Ast.lhs) : Simulator.lhs =
+  match lhs with 
+  | VarLHS (var_name) -> LVar(var_name)
+  | MapAccessLHS (map_name, key) -> LAccess(LVar(map_name), EVar(key))
+  | FieldAccessLHS (_, _) -> failwith "TODO what on earth is FieldAccessLHS again?"
+
 let rec convert_rhs (rhs : rhs) : Simulator.expr =
   match rhs with
   | VarRHS var -> EVar(var)
@@ -50,6 +56,7 @@ let rec generate_cfg_from_stmts (stmts : statement list) (cfg : CFG.t) (last_ver
   match stmts with
   | [] -> last_vert
   | stmt :: rest ->
+    let next_vert = generate_cfg_from_stmts rest cfg last_vert in
     begin match stmt with 
     | CondList (cond_stmts) ->
       begin
@@ -58,7 +65,33 @@ let rec generate_cfg_from_stmts (stmts : statement list) (cfg : CFG.t) (last_ver
       end
     | Expr expr -> 
       begin match expr with
-      | Assignment _ -> failwith "Not implemented assignment"
+      | Assignment (lhs, exp) -> 
+        begin match exp with
+        | RHS(rhs) -> 
+          CFG.create_vertex cfg (Instr(Assign(convert_lhs lhs, convert_rhs rhs), next_vert))
+        | RpcCallRHS(rpc_call) ->
+            begin match rpc_call with
+            | RpcCall(node, func_call) -> 
+              begin match func_call with
+              | FuncCall(func_name, actuals) -> 
+                let actuals = List.map (fun actual -> 
+                  match actual with Param(rhs) -> convert_rhs rhs
+                  ) actuals in
+                let assign_vert = CFG.create_vertex cfg (Instr(Assign(convert_lhs lhs, EVar "dontcare"), next_vert)) in
+                let await_vertex = CFG.create_vertex cfg (Await(LVar("dontcare"), EVar "async_future", assign_vert)) in
+                CFG.create_vertex cfg (Instr(Async(LVar("async_future"), EVar node, func_name, actuals), await_vertex))
+              end
+            | RpcAsyncCall (node, func_call) -> 
+              begin match func_call with
+              | FuncCall(func_name, actuals) ->
+                let actuals = List.map (fun actual -> 
+                  match actual with Param(rhs) -> convert_rhs rhs
+                  ) actuals in
+                CFG.create_vertex cfg (Instr(Async(LVar("async_future"), EVar node, func_name, actuals), next_vert))
+              end
+            end
+        | Assignment(_, _) -> failwith "Don't assign an Assignment"
+        end
       | RHS _ -> failwith "Not implemented rhs"
       | RpcCallRHS _ -> failwith "Not implemented rpc call"
       end
