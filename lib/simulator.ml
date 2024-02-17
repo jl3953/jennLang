@@ -40,6 +40,7 @@ type expr =
 type lhs =
   | LVar of string
   | LAccess of lhs * expr
+  | LTuple of string list
 [@@deriving ord]
 
 type instr =
@@ -73,6 +74,7 @@ type value =
 type lvalue =
   | LVVar of string
   | LVAccess of (value * (value, value) Hashtbl.t)
+  | LVTuple of string list
 
 module Env = Hashtbl.Make(struct
     type t = string
@@ -87,6 +89,7 @@ type 'a label =
   | Return of expr (* jenndbg return...I guess? *)
   (*| Read (* jenndbg read a value *)*)
   | Cond of expr * 'a * 'a
+  | ForLoopIn of lhs * expr * 'a * 'a
 
 module CFG : sig
   type t (* jenndbg: control flow graph type *)
@@ -238,7 +241,9 @@ let rec eval_lhs (env : record_env) (lhs : lhs) : lvalue =
           | VMap map -> LVAccess (eval env exp, map)
           | _ -> failwith "Type error!"
         end
+      | LVTuple _ -> failwith "Stop accessing maps with tuples"
     end
+  | LTuple strs -> LVTuple strs
 
 let store (lhs : lhs) (vl : value) (env : record_env) : unit =
   match eval_lhs env lhs with
@@ -254,6 +259,7 @@ let store (lhs : lhs) (vl : value) (env : record_env) : unit =
       end
   | LVAccess (key, table) ->
     Hashtbl.add table key vl
+  | LVTuple _ -> failwith "how to store LVTuples?"
 
 exception Halt
 
@@ -376,6 +382,16 @@ let exec (state : state) (program : program) (record : record) =
                  can't do any work. *)
               state.records <- record::state.records
           end
+        | VBool b -> 
+          begin match b with
+          | true -> 
+            print_endline "\tVBool true";
+            record.pc <- next;
+            loop ()
+          | false -> 
+            print_endline "\tVBool false";
+            state.records <- record::state.records
+          end
         | _ -> failwith "Type error!"
       end
     | Return expr -> 
@@ -385,7 +401,26 @@ let exec (state : state) (program : program) (record : record) =
       (* print_endline "Pause"; *)
       record.pc <- next;
       state.records <- record::state.records
-
+    | ForLoopIn (lhs, expr, body, next) -> 
+      print_endline "ForLoopIn";
+      begin match eval env expr with
+        | VList lst -> 
+          begin match lst with
+          | [] -> 
+            record.pc <- next;
+          | hd :: tl -> 
+            let new_env = Env.create 91 in
+            Env.add new_env (match lhs with | LVar v -> v | _ -> failwith "Type error!") hd;
+            let new_record = 
+              { pc = body
+              ; node = record.node
+              ; continuation = (fun _ -> ())
+              ; env = new_env }
+            in
+            state.records <- new_record::state.records
+          end
+        | _ -> failwith "Type error!"
+      end
   in
   loop ()
 
@@ -420,6 +455,7 @@ let schedule_record (state : state) (program : program): unit =
       end
     | Return _ -> 0
     | Cond (_, _, _) -> 0
+    | ForLoopIn (_, _, _, _) -> 0
   in
   print_int rando;
   print_endline "";

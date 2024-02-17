@@ -24,6 +24,7 @@ let convert_lhs(lhs : Ast.lhs) : Simulator.lhs =
   | VarLHS (var_name) -> LVar(var_name)
   | MapAccessLHS (map_name, key) -> LAccess(LVar(map_name), EVar(key))
   | FieldAccessLHS (_, _) -> failwith "TODO what on earth is FieldAccessLHS again?"
+  | TupleLHS lefts -> LTuple lefts
 
 let rec convert_rhs (rhs : rhs) : Simulator.expr =
   match rhs with
@@ -102,9 +103,18 @@ let rec generate_cfg_from_stmts (stmts : statement list) (cfg : CFG.t) (last_ver
       | RHS _
       | RpcCallRHS _ -> generate_cfg_from_stmts [Expr exp] cfg ret_vert
       end
-    | ForLoop (_) -> failwith "Not implemented for loop"
+    | ForLoopIn (idx, collection, body) -> 
+      let for_vert = CFG.fresh_vertex cfg in
+      let body_vert = generate_cfg_from_stmts body cfg for_vert in
+      CFG.set_label cfg for_vert (ForLoopIn(convert_lhs idx, convert_rhs collection, body_vert, next_vert));
+      for_vert
     | Comment -> generate_cfg_from_stmts rest cfg last_vert
-    | Await (_) -> failwith "Not implemented await"
+    | Await exp -> 
+      begin match exp with
+      | Assignment _ -> failwith "Don't Await an Assignment"
+      | RHS rhs -> CFG.create_vertex cfg (Await (LVar "ret", convert_rhs rhs, next_vert))
+      | RpcCallRHS _ -> failwith "Don't Await an RpcCallRHS"
+      end
     end
 
 and generate_cfg_from_cond_stmts (cond_stmts : cond_stmt list) (cfg : CFG.t) (next : CFG.vertex) : CFG.vertex =

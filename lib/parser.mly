@@ -38,7 +38,8 @@
 %left BANG
 %left AND
 %left OR
-%nonassoc EQUALS_EQUALS NOT_EQUALS 
+%nonassoc EQUALS_EQUALS NOT_EQUALS
+%left COMMA
 
 %type <Ast.prog> program
 
@@ -173,6 +174,12 @@ var_inits:
   | v = var_init SEMICOLON vs = var_inits
     {v :: vs}
 
+l_items:
+  | id1 = ID COMMA id2 = ID
+    { [id1; id2] }
+  | id = ID COMMA rest = l_items
+    { id::rest }
+
 left_side:
   | id = ID
     { VarLHS(id) }
@@ -180,16 +187,11 @@ left_side:
     { MapAccessLHS(mapName, key) }
   | rhs = right_side DOT key = ID
     { FieldAccessLHS(rhs, key) } 
+  | l_items = l_items
+    { TupleLHS(l_items) }
 
-// bool_lit:
-//   | TRUE
-//     { Bool true }
-//   | FALSE
-//     { Bool false }
 
 boolean:
-  // | b = bool_lit
-  //   { b }
   | TRUE 
     { Bool true }
   | FALSE
@@ -198,24 +200,8 @@ boolean:
     { Not rhs }
   | b1 = right_side AND b2 = right_side
     { And (b1, b2) }
-  // | b1 = bool_lit AND b2 = bool_lit
-  //   { And (b1, b2) }
-  // | b1 = bool_lit AND LEFT_PAREN rhs2 = right_side RIGHT_PAREN
-  //   { And (b1, rhs2) }
-  // | LEFT_PAREN rhs1 = right_side RIGHT_PAREN AND b2 = bool_lit 
-  //   { And (rhs1, b2) }
-  // | LEFT_PAREN rhs1 = right_side RIGHT_PAREN AND LEFT_PAREN rhs2 = right_side RIGHT_PAREN
-  //   { And (rhs1, rhs2) }
   | b1 = right_side OR b2 = right_side
     { Or (b1, b2) }
-  // | b1 = bool_lit OR b2 = bool_lit
-  //   { Or (b1, b2) }
-  // | b1 = bool_lit OR LEFT_PAREN rhs2=right_side RIGHT_PAREN
-  //   { Or (b1, rhs2) }
-  // | LEFT_PAREN rhs1 = right_side RIGHT_PAREN OR b2 = bool_lit
-  //   { Or (rhs1, b2) }
-  // | LEFT_PAREN rhs1 = right_side RIGHT_PAREN OR LEFT_PAREN rhs2=right_side RIGHT_PAREN
-  //   { Or (rhs1, rhs2) }
   | rhs1 = right_side EQUALS_EQUALS rhs2 = right_side
     { EqualsEquals (rhs1, rhs2)}
   | rhs1 = right_side NOT_EQUALS rhs2 = right_side
@@ -245,10 +231,6 @@ exp:
   | rpc_call = rpc_call
     { RpcCallRHS(rpc_call) }
 
-iterator:
-  | key = ID COMMA value = ID
-    { Iterator(key, value) }
-
 statement:
   | cond_stmts = cond_stmts
     { CondList(cond_stmts)}
@@ -256,12 +238,12 @@ statement:
     { Expr(e) }
   | RETURN e = exp SEMICOLON
     { Return(e) }
-  | FOR LEFT_PAREN it = iterator IN collection = right_side RIGHT_PAREN LEFT_CURLY_BRACE
+  | FOR LEFT_PAREN idx = left_side IN collection = right_side RIGHT_PAREN LEFT_CURLY_BRACE
     body = statements
     RIGHT_CURLY_BRACE
-    { ForLoop(it, collection, body) }
-  | AWAIT b = boolean SEMICOLON
-    { Await(b) }
+    { ForLoopIn(idx, collection, body) }
+  | AWAIT e = exp SEMICOLON
+    { Await(e) }
 
 params:
   | rhs = right_side

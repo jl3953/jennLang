@@ -49,14 +49,12 @@ and lhs =
   | VarLHS of string
   | MapAccessLHS of string * string
   | FieldAccessLHS of rhs * string
+  | TupleLHS of string list
 
 and expr =
   | Assignment of lhs * expr
   | RHS of rhs 
   | RpcCallRHS of rpc_call
-
-type iterator = 
-  | Iterator of string * string
 
 (* list of condition to be evaluated * statement body, else condition is just true*)
 type cond_stmt = IfElseIf of rhs * statement list 
@@ -65,9 +63,9 @@ and statement =
   | CondList of cond_stmt list 
   | Expr of expr
   | Return of expr
-  | ForLoop of iterator * rhs * statement list
+  | ForLoopIn of lhs * rhs * statement list
   | Comment
-  | Await of boolean
+  | Await of expr
 
 type func_def = FuncDef of func_call * type_def * statement list
 
