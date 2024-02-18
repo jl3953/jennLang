@@ -41,18 +41,17 @@ Node {
         if (failed_node == successor) {
             successor = failed_node_succ;
             dirty_logs = {};
-            for (key, committed in range(is_committed)) {
+            for (key, committed in is_committed) {
                 if (!committed) {
                     dirty_logs[key] = db[key];
                 }
             }
             rpc_call(successor, PropagateDirtyLogs(dirty_logs));
         }
-        
         if (failed_node == predecessor) {
             predecessor = failed_node_pred;
             clean_logs = {};
-            for (key, committed in range(is_committed)) {
+            for (key, committed in is_committed) {
                 if (committed) {
                     clean_logs[key] = db[key];
                 }
@@ -67,7 +66,6 @@ Node {
             rpc_call(tail, PropagateLogsToTail(db));
         }
     }
-    
     func Init(assigned_role, pred, succ, h, t, data) -> none {
         role = assigned_role;
         predecessor = pred;
@@ -76,15 +74,14 @@ Node {
         tail = t;
         db = {};
 
-        for (key, value in range(data)) {
+        for (key, value in data) {
             db[key] = value;
         }
     }
-
     // Receiving dirty logs
     func PropagateDirtyLogs(dirty_logs) -> none {
         diff_dirty_logs = {};
-        for (key, value in range(dirty_logs)) {
+        for (key, value in dirty_logs) {
             // previous value is committed, but hasn't seen new version yet.
             if ((value != db[key]) && (true == is_committed[key])) {
                 db[key] = value;
@@ -97,7 +94,7 @@ Node {
 
     func BackPropagateCleanLogs(clean_logs) -> none {
         diff_clean_logs = {};
-        for (key, value in range(clean_logs)) {
+        for (key, value in clean_logs) {
             if ((value == db[key]) && (false == is_committed[key])) {
                 is_committed[key] = true;
                 if ("Head" != role) {
@@ -107,9 +104,10 @@ Node {
         }
     }
 
+    
     func PropagageLogsToTail(other_db) -> none {
         if (role == "Tail") {
-            for (key, value in range(other_db)) {
+            for (key, value in other_db) {
                 db[key] = value;
             }
         } 

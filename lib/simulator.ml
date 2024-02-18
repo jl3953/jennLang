@@ -402,25 +402,42 @@ let exec (state : state) (program : program) (record : record) =
       record.pc <- next;
       state.records <- record::state.records
     | ForLoopIn (lhs, expr, body, next) -> 
-      print_endline "ForLoopIn";
-      begin match eval env expr with
-        | VList lst -> 
-          begin match lst with
-          | [] -> 
-            record.pc <- next;
-          | hd :: tl -> 
-            let new_env = Env.create 91 in
-            Env.add new_env (match lhs with | LVar v -> v | _ -> failwith "Type error!") hd;
+      let new_env = Env.create 91 in 
+      begin match eval env expr with 
+      | VMap map -> 
+        begin match lhs with 
+        | LTuple [key; value] -> 
+          let () = Hashtbl.iter (fun k v ->
+            Env.add new_env key k;
+            Env.add new_env value v;
             let new_record = 
-              { pc = body
-              ; node = record.node
+              { node = record.node
+              ; pc = body
+              ; continuation = (fun _ -> ())
+              ; env = new_env }
+            in state.records <- new_record::state.records
+          ) map in
+          record.pc <- next
+        | _ -> failwith "Cannot iterate through map with anything other than a 2-tuple"
+        end
+      | VList list -> 
+        begin match lhs with 
+        | LVar idx -> 
+          let () = List.iter (fun v -> 
+            Env.add new_env idx v;
+            let new_record = 
+              { node = record.node
+              ; pc = body
               ; continuation = (fun _ -> ())
               ; env = new_env }
             in
             state.records <- new_record::state.records
-          end
-        | _ -> failwith "Type error!"
-      end
+          ) list in
+          record.pc <- next
+        | _ -> failwith "Cannot iterate through list with anything other than a variable"
+        end
+      | _ -> failwith "Type error!"
+    end
   in
   loop ()
 
