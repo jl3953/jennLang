@@ -109,8 +109,8 @@ let rec generate_cfg_from_stmts (stmts : statement list) (cfg : CFG.t) (last_ver
       end
     | ForLoopIn (idx, collection, body) -> 
       let for_vert = CFG.fresh_vertex cfg in
-      let ret_vert = CFG.create_vertex cfg (Return(EBool true)) in
-      let body_vert = generate_cfg_from_stmts body cfg ret_vert in
+      (* let ret_vert = CFG.create_vertex cfg (Return(EBool true)) in *)
+      let body_vert = generate_cfg_from_stmts body cfg for_vert in
       CFG.set_label cfg for_vert (ForLoopIn(convert_lhs idx, convert_rhs collection, body_vert, next_vert));
       let local_copy_vert = CFG.create_vertex cfg (Instr(Assign(LVar "local_copy", convert_rhs collection), for_vert)) in
       local_copy_vert
