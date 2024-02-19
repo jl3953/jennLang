@@ -11,6 +11,7 @@ let data =
   let tbl = Hashtbl.create 91 in
   Hashtbl.add tbl (VString "birthday") (VInt 214);
   Hashtbl.add tbl (VString "epoch") (VInt 1980);
+  Hashtbl.add tbl (VString "name") (VString "Jennifer");
   tbl
 
 let global_state = 
@@ -108,7 +109,8 @@ let rec generate_cfg_from_stmts (stmts : statement list) (cfg : CFG.t) (last_ver
       end
     | ForLoopIn (idx, collection, body) -> 
       let for_vert = CFG.fresh_vertex cfg in
-      let body_vert = generate_cfg_from_stmts body cfg for_vert in
+      let ret_vert = CFG.create_vertex cfg (Return(EBool true)) in
+      let body_vert = generate_cfg_from_stmts body cfg ret_vert in
       CFG.set_label cfg for_vert (ForLoopIn(convert_lhs idx, convert_rhs collection, body_vert, next_vert));
       for_vert
     | Comment -> generate_cfg_from_stmts rest cfg last_vert
@@ -259,6 +261,6 @@ let interp (f : string) : unit =
   print_endline "Program recognized as valid!";
 ;;
   
-interp "/home/jennifer/jennLang/bin/CRAQ.jenn"
+interp "/Users/jenniferlam/jennLang/bin/CRAQ.jenn"
 let () = print_endline "Program recognized as valid!"
 let () = print_endline "Program ran successfully!"

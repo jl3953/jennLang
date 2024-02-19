@@ -222,9 +222,7 @@ let rec eval (env : record_env) (expr : expr) : value =
       | e :: rest -> (eval env e) :: (makelist rest)
       end in
       VList (makelist exprs)
-  | EString s -> 
-    (* print_endline ("VString " ^ s);  *)
-    VString s
+  | EString s -> VString s
 
 let rec eval_lhs (env : record_env) (lhs : lhs) : lvalue =
   match lhs with
@@ -269,7 +267,7 @@ let function_info name program =
 
 (* Execute record until pause/return.  Invariant: record does *not* belong to
    state.records *)
-let exec (state : state) (program : program) (record : record) =
+let rec exec (state : state) (program : program) (record : record) =
   let env =
     { local_env = record.env; node_env = state.nodes.(record.node) }
   in
@@ -353,15 +351,14 @@ let exec (state : state) (program : program) (record : record) =
           end
         | Assign (lhs, rhs) -> 
           print_endline ("\tAssign executing on node " ^ string_of_int record.node);
-          store lhs (eval env rhs) env;
-          begin match lhs with 
+          begin match lhs with
           | LVar v -> print_endline ("LVar " ^ v)
-          | LAccess (v, exp)  ->
-            begin match v with 
-            | LVar lv -> 
-              begin match exp with
-              | EVar v -> print_endline ("LAccess " ^ lv ^ "[" ^ v ^ "]")
-              | EInt i -> print_endline ("LAccess " ^ lv ^ "[" ^ string_of_int i ^ "]")
+          | LAccess (map, key)  ->
+            begin match map with 
+            | LVar map_name -> 
+              begin match eval env key with
+              | VString k -> print_endline ("LAccess " ^ map_name ^ "[" ^ k ^ "]")
+              | VInt k -> print_endline ("LAccess " ^ map_name ^ "[" ^ string_of_int k ^ "]")
               | _ -> print_endline "What are you doing hurdur"
               end
             | _ -> print_endline "What are you doing"
@@ -377,7 +374,8 @@ let exec (state : state) (program : program) (record : record) =
           | VFuture _ -> print_endline "\t\tVFuture"
           | VString s -> print_endline ("\t\tVString " ^ s)
           | VNode n -> print_endline ("\t\tVNode " ^ string_of_int n)
-          end
+          end;
+          store lhs (eval env rhs) env;
       end;
       loop ()
     | Cond (cond, bthen, belse) -> 
@@ -436,7 +434,11 @@ let exec (state : state) (program : program) (record : record) =
       record.pc <- next;
       state.records <- record::state.records
     | ForLoopIn (lhs, expr, body, next) -> 
-      let new_env = Env.create 91 in 
+      let new_env = 
+        let create_env = Env.create 91 in
+        Env.iter (fun k v ->
+        Env.add create_env k v) 
+        env.local_env; create_env in
       begin match eval env expr with 
       | VMap map -> 
         begin match lhs with 
@@ -444,13 +446,24 @@ let exec (state : state) (program : program) (record : record) =
           print_endline ("ForLoopIn " ^ key ^ " " ^ value);
           let () = Hashtbl.iter (fun k v ->
             Env.add new_env key k;
+            begin match k with 
+            | VString s -> print_endline ("key VString " ^ s)
+            | VInt i -> print_endline ("key VInt " ^ string_of_int i)
+            | _ -> print_endline "key what are you"
+            end;
             Env.add new_env value v;
+            begin match v with 
+            | VString s -> print_endline ("value VString " ^ s)
+            | VInt i -> print_endline ("value VInt " ^ string_of_int i)
+            | _ -> print_endline "value what are you"
+            end;
             let new_record = 
               { node = record.node
               ; pc = body
               ; continuation = (fun _ -> ())
               ; env = new_env }
-            in state.records <- new_record::state.records
+            in exec state program new_record
+            (* state.records <- new_record::state.records *)
           ) map in
           record.pc <- next
         | _ -> failwith "Cannot iterate through map with anything other than a 2-tuple"
@@ -466,7 +479,7 @@ let exec (state : state) (program : program) (record : record) =
               ; continuation = (fun _ -> ())
               ; env = new_env }
             in
-            state.records <- new_record::state.records
+            exec state program new_record
           ) list in
           record.pc <- next
         | _ -> failwith "Cannot iterate through list with anything other than a variable"
