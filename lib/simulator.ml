@@ -299,9 +299,19 @@ let exec (state : state) (program : program) (record : record) =
           begin match eval env node with
             | VNode node_id ->
               let new_future = ref None in
-              let { entry; formals; _ } = function_info (func ^ "_" ^ roleName) program in
+              let { entry; formals; _ } = function_info func program in
               let new_env = Env.create 91 in
               List.iter2 (fun (formal, _) actual ->
+                  (* print_endline ("formal: " ^ formal);
+                  begin match actual with
+                  | EVar v -> print_endline ("EVar " ^ v)
+                  | EInt i -> print_endline ("EInt " ^ string_of_int i)
+                  | EBool b -> print_endline ("EBool " ^ string_of_bool b)
+                  | EFind (_, _) -> print_endline "EFind"
+                  | EMap _ -> print_endline "EMap"
+                  | EString s -> print_endline ("EString " ^ s)
+                  | _ -> failwith "what type are you"
+                  end; *)
                   Env.add new_env formal (eval env actual))
                 formals
                 actuals;
@@ -323,8 +333,8 @@ let exec (state : state) (program : program) (record : record) =
               begin match load role env with 
               | VNode node_id ->
                 let new_future = ref None in
-                print_endline ("Find func " ^ (func ^ "_" ^ role) ^ " for node " ^ string_of_int node_id);
-                let { entry; formals; _ } = function_info (func ^ "_" ^ role) program in
+                print_endline ("Find func " ^ func ^ " for node " ^ string_of_int node_id);
+                let { entry; formals; _ } = function_info func program in
                 let new_env = Env.create 91 in
                 List.iter2 (fun (formal, _) actual ->
                     Env.add new_env formal (eval env actual))
@@ -343,7 +353,31 @@ let exec (state : state) (program : program) (record : record) =
           end
         | Assign (lhs, rhs) -> 
           print_endline ("\tAssign executing on node " ^ string_of_int record.node);
-          store lhs (eval env rhs) env
+          store lhs (eval env rhs) env;
+          begin match lhs with 
+          | LVar v -> print_endline ("LVar " ^ v)
+          | LAccess (v, exp)  ->
+            begin match v with 
+            | LVar lv -> 
+              begin match exp with
+              | EVar v -> print_endline ("LAccess " ^ lv ^ "[" ^ v ^ "]")
+              | EInt i -> print_endline ("LAccess " ^ lv ^ "[" ^ string_of_int i ^ "]")
+              | _ -> print_endline "What are you doing hurdur"
+              end
+            | _ -> print_endline "What are you doing"
+            end
+          | LTuple _ -> print_endline "LTuple"
+          end;
+          begin match (eval env rhs) with
+          | VInt i -> print_endline ("\t\tVInt " ^ string_of_int i)
+          | VBool b -> print_endline ("\t\tVBool " ^ string_of_bool b)
+          | VMap _ -> print_endline "\t\tVMap"
+          | VList _ -> print_endline "\t\tVList"
+          | VOption _ -> print_endline "\t\tVOption"
+          | VFuture _ -> print_endline "\t\tVFuture"
+          | VString s -> print_endline ("\t\tVString " ^ s)
+          | VNode n -> print_endline ("\t\tVNode " ^ string_of_int n)
+          end
       end;
       loop ()
     | Cond (cond, bthen, belse) -> 
@@ -407,6 +441,7 @@ let exec (state : state) (program : program) (record : record) =
       | VMap map -> 
         begin match lhs with 
         | LTuple [key; value] -> 
+          print_endline ("ForLoopIn " ^ key ^ " " ^ value);
           let () = Hashtbl.iter (fun k v ->
             Env.add new_env key k;
             Env.add new_env value v;

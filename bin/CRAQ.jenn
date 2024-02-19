@@ -131,11 +131,11 @@ ClientInterface {
     }
 
     func init_head(dest, succ, t, data) -> none {
-        rpc_call(dest, Init("Head", none, succ, dest, t, data));
+        rpc_call(dest, Init("Head", dest, succ, dest, t, data));
     }
 
     func init_tail(dest, pred, h, data) -> none {
-        rpc_call(dest, Init("Tail", pred, none, h, dest, data));
+        rpc_call(dest, Init("Tail", pred, dest, h, dest, data));
     }
 
     func init_mid(dest, pred, succ, h, t, data) -> none {

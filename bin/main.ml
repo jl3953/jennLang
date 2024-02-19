@@ -30,7 +30,10 @@ let rec convert_rhs (rhs : rhs) : Simulator.expr =
   match rhs with
   | VarRHS var -> EVar(var)
   | MapAccessRHS(map, key) -> EFind(map, EVar(key))
-  | FuncCallRHS _ -> failwith "Didn't implement FuncCallRHS yet"
+  | FuncCallRHS func_call ->
+    begin match func_call with
+    | FuncCall(func_name, _) -> failwith ("Didn't implement FuncCallRHS yet func: " ^ func_name)
+    end
   | Literal literal -> 
     begin match literal with
     | Options _ -> failwith "Didn't implement Options yet"
