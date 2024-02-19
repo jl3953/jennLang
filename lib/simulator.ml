@@ -434,6 +434,28 @@ let rec exec (state : state) (program : program) (record : record) =
       record.pc <- next;
       state.records <- record::state.records
     | ForLoopIn (lhs, expr, body, next) -> 
+      begin match eval env expr with
+      | VMap map -> 
+        if (Hashtbl.length map) == 0 then 
+          record.pc <- next
+        else
+          let single_pair = 
+          let result_ref = ref None in Hashtbl.iter (fun key value ->
+            match !result_ref with
+             Some _ -> ()  (* We already found a pair, so do nothing *)
+             | None -> result_ref := Some (key, value)
+             ) map;
+          !result_ref in
+          Hashtbl.remove map (fst (Option.get single_pair));
+          store lhs (VMap map) env;
+      | _ -> failwith "Type error!"
+      end
+(* 
+
+          begin match lhs with 
+          | LTuple [key; value] ->
+            print_endline ("ForLoopIn " ^ key ^ " " ^ value);
+      end
       let new_env = 
         let create_env = Env.create 91 in
         Env.iter (fun k v ->
@@ -441,10 +463,13 @@ let rec exec (state : state) (program : program) (record : record) =
         env.local_env; create_env in
       begin match eval env expr with 
       | VMap map -> 
-        begin match lhs with 
-        | LTuple [key; value] -> 
-          print_endline ("ForLoopIn " ^ key ^ " " ^ value);
-          let () = Hashtbl.iter (fun k v ->
+        if (Hashtbl.length map) == 0 then 
+          record.pc <- next
+        else 
+          begin match lhs with 
+          | LTuple [key; value] -> 
+            print_endline ("ForLoopIn " ^ key ^ " " ^ value);
+            let () = Hashtbl.iter (fun k v ->
             Env.add new_env key k;
             begin match k with 
             | VString s -> print_endline ("key VString " ^ s)
@@ -457,6 +482,8 @@ let rec exec (state : state) (program : program) (record : record) =
             | VInt i -> print_endline ("value VInt " ^ string_of_int i)
             | _ -> print_endline "value what are you"
             end;
+            Hashtbl.remove map k;
+            store lhs (VMap map) new_env;
             let new_record = 
               { node = record.node
               ; pc = body
@@ -467,7 +494,7 @@ let rec exec (state : state) (program : program) (record : record) =
           ) map in
           record.pc <- next
         | _ -> failwith "Cannot iterate through map with anything other than a 2-tuple"
-        end
+        end 
       | VList list -> 
         begin match lhs with 
         | LVar idx -> 
@@ -485,7 +512,7 @@ let rec exec (state : state) (program : program) (record : record) =
         | _ -> failwith "Cannot iterate through list with anything other than a variable"
         end
       | _ -> failwith "Type error!"
-    end
+    end*)
   in
   loop ()
 

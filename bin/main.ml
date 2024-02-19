@@ -112,7 +112,8 @@ let rec generate_cfg_from_stmts (stmts : statement list) (cfg : CFG.t) (last_ver
       let ret_vert = CFG.create_vertex cfg (Return(EBool true)) in
       let body_vert = generate_cfg_from_stmts body cfg ret_vert in
       CFG.set_label cfg for_vert (ForLoopIn(convert_lhs idx, convert_rhs collection, body_vert, next_vert));
-      for_vert
+      let local_copy_vert = CFG.create_vertex cfg (Instr(Assign(LVar "local_copy", convert_rhs collection), for_vert)) in
+      local_copy_vert
     | Comment -> generate_cfg_from_stmts rest cfg last_vert
     | Await exp -> 
       begin match exp with
