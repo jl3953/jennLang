@@ -124,7 +124,8 @@ type record =
   ; continuation : value -> unit (* Called when activation record returns
                                     For RPCs, this writes to the associate future;
                                     For client operations it appends to the history *)
-  ; env : value Env.t }
+  ; env : value Env.t 
+  ; id : int }
 
 type op_kind = Invocation | Response
 
@@ -132,7 +133,8 @@ type operation =
   { client_id : int
   ; op_action : string
   ; kind : op_kind
-  ; payload : value list }
+  ; payload : value list 
+  ; unique_id : int }
 
 (* Global state *)
 type state =
@@ -230,6 +232,7 @@ let rec eval_lhs (env : record_env) (lhs : lhs) : lvalue =
   | LAccess (lhs, exp) ->
     begin match eval_lhs env lhs with
       | LVVar var ->
+        print_endline ("Accessing " ^ var);
         begin match load var env with
           | VMap map -> LVAccess (eval env exp, map)
           | _ -> failwith "Type error!"
@@ -267,7 +270,7 @@ let function_info name program =
 
 (* Execute record until pause/return.  Invariant: record does *not* belong to
    state.records *)
-let rec exec (state : state) (program : program) (record : record) =
+let exec (state : state) (program : program) (record : record) =
   let env =
     { local_env = record.env; node_env = state.nodes.(record.node) }
   in
@@ -317,7 +320,8 @@ let rec exec (state : state) (program : program) (record : record) =
                 { node = node_id
                 ; pc = entry
                 ; continuation = (fun value -> new_future := Some value)
-                ; env = new_env }
+                ; env = new_env
+                ; id = record.id}
               in
               store lhs (VFuture new_future) env
               ; state.records <- new_record::state.records
@@ -342,7 +346,8 @@ let rec exec (state : state) (program : program) (record : record) =
                   { node = node_id
                   ; pc = entry
                   ; continuation = (fun value -> new_future := Some value)
-                  ; env = new_env }
+                  ; env = new_env 
+                  ; id = record.id}
                 in
                 store lhs (VFuture new_future) env
                 ; state.records <- new_record::state.records
@@ -390,14 +395,20 @@ let rec exec (state : state) (program : program) (record : record) =
       loop ()
     | Await (lhs, expr, next) -> 
       print_endline "Await"; 
-      (* begin match expr with 
+      begin match expr with 
       | EVar v -> print_endline ("EVar " ^ v)
       | EInt i -> print_endline ("EInt " ^ string_of_int i)
       | EBool b -> print_endline ("EBool " ^ string_of_bool b)
       | EFind (_, _) -> print_endline "EFind"
-      | EMap -> print_endline "EMap"
+      | EMap _ -> print_endline "EMap"
       | EString s -> print_endline ("EString " ^ s)
-      end;  *)
+      | ENot _ -> print_endline "ENot"
+      | EAnd _ -> print_endline "EAnd"
+      | EOr _ -> print_endline "EOr"
+      | EEqualsEquals _ -> print_endline "EEqualsEquals"
+      | EList _ -> print_endline "EList"
+      end;
+      print_endline ("On node " ^ string_of_int record.node);
       begin match eval env expr with
         | VFuture fut -> 
           print_endline "\tVFuture";
@@ -436,8 +447,13 @@ let rec exec (state : state) (program : program) (record : record) =
     | ForLoopIn (lhs, expr, body, next) -> 
       begin match eval env expr with
       | VMap map -> 
+        (* First remove the pair being processed from the map. *)
         if (Hashtbl.length map) == 0 then 
-          record.pc <- next
+          begin
+          print_endline "jenndebug made it here";
+          record.pc <- next;
+          loop()
+          end
         else
           let single_pair = 
           let result_ref = ref None in Hashtbl.iter (fun key value ->
@@ -447,116 +463,78 @@ let rec exec (state : state) (program : program) (record : record) =
              ) map;
           !result_ref in
           Hashtbl.remove map (fst (Option.get single_pair));
-          store lhs (VMap map) env;
-      | _ -> failwith "Type error!"
-      end
-(* 
-
-          begin match lhs with 
-          | LTuple [key; value] ->
-            print_endline ("ForLoopIn " ^ key ^ " " ^ value);
-      end
-      let new_env = 
-        let create_env = Env.create 91 in
-        Env.iter (fun k v ->
-        Env.add create_env k v) 
-        env.local_env; create_env in
-      begin match eval env expr with 
-      | VMap map -> 
-        if (Hashtbl.length map) == 0 then 
-          record.pc <- next
-        else 
-          begin match lhs with 
+          store (LVar "local_copy") (VMap map) env;
+          (* let new_env = 
+            let create_env = Env.create 91 in
+            Env.iter (fun k v ->
+            Env.add create_env k v) 
+            env.local_env; create_env in *)
+          begin match lhs with
           | LTuple [key; value] -> 
-            print_endline ("ForLoopIn " ^ key ^ " " ^ value);
-            let () = Hashtbl.iter (fun k v ->
-            Env.add new_env key k;
-            begin match k with 
-            | VString s -> print_endline ("key VString " ^ s)
-            | VInt i -> print_endline ("key VInt " ^ string_of_int i)
-            | _ -> print_endline "key what are you"
-            end;
-            Env.add new_env value v;
-            begin match v with 
-            | VString s -> print_endline ("value VString " ^ s)
-            | VInt i -> print_endline ("value VInt " ^ string_of_int i)
-            | _ -> print_endline "value what are you"
-            end;
-            Hashtbl.remove map k;
-            store lhs (VMap map) new_env;
-            let new_record = 
-              { node = record.node
-              ; pc = body
-              ; continuation = (fun _ -> ())
-              ; env = new_env }
-            in exec state program new_record
-            (* state.records <- new_record::state.records *)
-          ) map in
-          record.pc <- next
-        | _ -> failwith "Cannot iterate through map with anything other than a 2-tuple"
-        end 
-      | VList list -> 
-        begin match lhs with 
-        | LVar idx -> 
-          let () = List.iter (fun v -> 
-            Env.add new_env idx v;
-            let new_record = 
-              { node = record.node
-              ; pc = body
-              ; continuation = (fun _ -> ())
-              ; env = new_env }
-            in
-            exec state program new_record
-          ) list in
-          record.pc <- next
-        | _ -> failwith "Cannot iterate through list with anything other than a variable"
-        end
+            let (k, v) = Option.get single_pair in
+            Env.add env.node_env key k;
+            Env.add env.node_env value v;
+            record.pc <- body;
+            loop () 
+          | _ -> failwith "Cannot iterate through map with anything other than a 2-tuple"
+          end
       | _ -> failwith "Type error!"
-    end*)
+      end
   in
   loop ()
 
-let schedule_record (state : state) (program : program): unit =
+let schedule_record (state : state) (program : program) (unique_id: int) : unit =
   print_int (List.length state.records);
   print_endline " scheduling records left";
-  let rec pick n before after =
-    match after with
-    | [] -> print_endline "Halt"; raise Halt
-    | (r::rs) -> 
-      if n == 0 then begin
-        state.records <- List.rev_append before rs;
-        exec state program r
-      end else
-        pick (n-1) (r::before) rs
-  in
-  (* let rando = Random.int (List.length state.records) in *)
-  let head = List.hd state.records in
-  let vert = head.pc in 
-  let rando = 
-    match (CFG.label program.cfg vert) with
-    | Instr (_, _) -> 0
-    | Pause _ -> 
-      begin match (List.length state.records) with
-      | 1 -> 0
-      |__ -> 1
-      end
-    | Await (_, _, _) -> 
-      begin match (List.length state.records) with
-      | 1 -> 0
-      |__ -> 1
-      end
-    | Return _ -> 0
-    | Cond (_, _, _) -> 0
-    | ForLoopIn (_, _, _, _) -> 0
-  in
-  print_int rando;
-  print_endline "";
-  pick rando [] state.records
-  (* pick 0 [] state.records *)
+  if unique_id > 0 then
+    begin
+    print_endline ("unique_id " ^ string_of_int unique_id);
+    let rec pick before after =
+      match after with
+      | [] -> print_endline "Halt"; raise Halt
+      | (r::rs) -> 
+        if r.id == unique_id then begin
+          state.records <- List.rev_append before rs;
+          exec state program r
+        end else
+          pick (r::before) rs
+    in
+    pick [] state.records
+  end
+  else
+    begin
+    print_endline "no unique_id";
+    let rec pick n before after =
+      match after with
+      | [] -> print_endline "Halt"; raise Halt
+      | (r::rs) -> 
+        if n == 0 then begin
+          state.records <- List.rev_append before rs;
+          exec state program r
+        end else
+          pick (n-1) (r::before) rs
+    in
+    (* let rando = Random.int (List.length state.records) in *)
+    let head = List.hd state.records in
+    let vert = head.pc in 
+    let rando = 
+      match (CFG.label program.cfg vert) with
+      | Instr (_, _) -> 0
+      | Pause _ -> if (List.length state.records) == 1 then 0 else 1
+      | Await (_, _, _) -> if (List.length state.records) == 1 then 0 else 1
+      | Return _ -> 0
+      | Cond (_, _, _) -> 0
+      | ForLoopIn (_, _, _, _) -> 0
+    in
+    print_endline ("chosen idx " ^ string_of_int rando);
+    print_endline "";
+    pick rando [] state.records
+    (* pick 0 [] state.records *)
+  end
 
 (* Choose a client without a pending operation, create a new activation record
    to execute it, and append the invocation to the history *)
-let schedule_client (state : state) (program : program) (func_name : string) (actuals : value list): unit =
+let schedule_client (state : state) (program : program) (func_name : string) (actuals : value list) (unique_id : int): unit =
   let rec pick n before after =
     match after with
     | [] -> raise Halt 
@@ -582,7 +560,8 @@ let schedule_client (state : state) (program : program) (func_name : string) (ac
           { client_id = c
           ; op_action = op.name
           ; kind = Invocation
-          ; payload = actuals }
+          ; payload = actuals
+          ; unique_id = unique_id }
         in
         let continuation value =
           (* After completing the operation, add response to the history and
@@ -591,7 +570,8 @@ let schedule_client (state : state) (program : program) (func_name : string) (ac
             { client_id = c
             ; op_action = op.name
             ; kind = Response
-            ; payload = [value] }
+            ; payload = [value]
+            ; unique_id = unique_id }
           in
           DA.add state.history response;
           state.free_clients <- c::state.free_clients
@@ -600,7 +580,8 @@ let schedule_client (state : state) (program : program) (func_name : string) (ac
           { pc = op.entry
           ; node = c
           ; continuation = continuation
-          ; env = env }
+          ; env = env 
+          ; id = unique_id }
         in
         state.free_clients <- List.rev_append before cs;
         DA.add state.history invocation;

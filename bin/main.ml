@@ -111,7 +111,7 @@ let rec generate_cfg_from_stmts (stmts : statement list) (cfg : CFG.t) (last_ver
       let for_vert = CFG.fresh_vertex cfg in
       (* let ret_vert = CFG.create_vertex cfg (Return(EBool true)) in *)
       let body_vert = generate_cfg_from_stmts body cfg for_vert in
-      CFG.set_label cfg for_vert (ForLoopIn(convert_lhs idx, convert_rhs collection, body_vert, next_vert));
+      CFG.set_label cfg for_vert (ForLoopIn(convert_lhs idx, EVar "local_copy", body_vert, next_vert));
       let local_copy_vert = CFG.create_vertex cfg (Instr(Assign(LVar "local_copy", convert_rhs collection), for_vert)) in
       local_copy_vert
     | Comment -> generate_cfg_from_stmts rest cfg last_vert
@@ -207,7 +207,7 @@ let process_program (prog : prog) : program =
 
 let sync_exec (global_state : state) (prog : program) : unit = 
   while not ((List.length global_state.records) = 0) do
-    schedule_record global_state prog
+    schedule_record global_state prog (-1)
   done
 
 let parse_file (filename : string) : prog =
@@ -226,16 +226,14 @@ let init_topology (topology : string) (global_state : state) (prog : program) : 
       VNode head_idx
     ; VNode (head_idx + 1)
     ; VNode tail_idx
-    ; VMap data];
+    ; VMap data] 0;
     sync_exec global_state prog;
-
     schedule_client global_state prog "init_tail" [
       VNode tail_idx
     ; VNode (tail_idx - 1)
     ; VNode head_idx
-    ; VMap data];
+    ; VMap data] 0;
     sync_exec global_state prog;
-
     for i = 1 to num_servers - 2 do
       schedule_client global_state prog "init_mid" [
         VNode i
@@ -243,7 +241,7 @@ let init_topology (topology : string) (global_state : state) (prog : program) : 
       ; VNode (i + 1)
       ; VNode head_idx
       ; VNode tail_idx
-      ; VMap data];
+      ; VMap data] 0;
       sync_exec global_state prog
     done
 
@@ -252,6 +250,26 @@ let init_topology (topology : string) (global_state : state) (prog : program) : 
   | "FULL" -> raise (Failure "Not implemented FULL topology")
   | _ -> raise (Failure "Invalid topology")
 
+let print_single_node (node : (value Env.t)) = 
+  Env.iter (fun key value ->
+    match value with 
+    | VInt i -> print_endline (key ^ ": " ^ (string_of_int i))
+    | VBool b -> print_endline (key ^ ": " ^ (string_of_bool b))
+    | VString s -> print_endline (key ^ ": " ^ s)
+    | VNode n -> print_endline (key ^ ": " ^ (string_of_int n))
+    | VFuture _ -> print_endline (key ^ ": VFuture")
+    | VMap _ -> print_endline (key ^ ": VMap")
+    | VOption _ -> print_endline (key ^ ": VOptions")
+    | VList _ -> print_endline (key ^ ": VList")
+  ) node
+
+let print_global_nodes (nodes : (value Env.t) array) = 
+  Array.iter (fun node ->
+    print_endline ("Node has:");
+    print_single_node node;
+    print_endline "";
+  ) nodes
+
 let interp (f : string) : unit =
   (* Load the program into the simulator *)
   let _ = parse_file f in ();
@@ -259,7 +277,34 @@ let interp (f : string) : unit =
     let ast = parse_file f in 
     process_program ast in 
   init_topology topology global_state prog;
-  print_endline "Program recognized as valid!";
+  schedule_client global_state prog "write" [VNode 0; VString "birthday"; VString "812"] 0;
+  sync_exec global_state prog;
+  schedule_client global_state prog "read" [VNode 0; VString "birthday"] 0;
+  sync_exec global_state prog;
+  
+  let oc = open_out "output.csv" in
+  Printf.fprintf oc "ClientID,Kind,Action,Payload,Value\n";
+  DA.iter (fun op -> 
+    Printf.fprintf oc "%d," op.client_id
+    ; begin match op.kind with 
+      | Response -> Printf.fprintf oc "Response,"
+      | Invocation -> Printf.fprintf oc "Invocation,"
+    end
+    ; Printf.fprintf oc "%s," op.op_action
+    ; List.iter ( fun v -> match v with
+      | VInt i -> Printf.fprintf oc "%d," i
+      | VBool b -> Printf.fprintf oc "%s," (string_of_bool b)
+      | VString s -> Printf.fprintf oc "%s," s
+      | VNode n -> Printf.fprintf oc "%d," n
+      | VFuture _ -> Printf.fprintf oc "TODO implement VFuture"
+      | VMap _ -> Printf.fprintf oc "TODO implement VMap"
+      | VOption _ -> Printf.fprintf oc "TODO implement VOptions"
+      | VList _ -> Printf.fprintf oc "TODO implement VList"
+      ) 
+      op.payload
+    ; Printf.fprintf oc "\n"
+    ) global_state.history;
+    print_global_nodes global_state.nodes;
 ;;
   
 interp "/Users/jenniferlam/jennLang/bin/CRAQ.jenn"
