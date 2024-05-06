@@ -183,29 +183,30 @@ let rec eval (env : record_env) (expr : expr) : value =
   | EFind (m, k) ->
     begin match load m env with
       | VMap map -> Hashtbl.find map (eval env k)
-      | _ -> failwith "Type error!"
+      | _ -> failwith "EFind eval fail"
     end
   | ENot e -> 
     begin match eval env e with
       | VBool b -> VBool (not b)
-      | _ -> failwith "Type error!"
+      | _ -> failwith "ENot eval fail"
     end
   | EAnd (e1, e2) ->
     begin match eval env e1, eval env e2 with
       | VBool b1, VBool b2 -> VBool (b1 && b2)
-      | _ -> failwith "Type error!"
+      | _ -> failwith "EAnd eval fail"
     end
   | EOr (e1, e2) ->
     begin match eval env e1, eval env e2 with
       | VBool b1, VBool b2 -> VBool (b1 || b2)
-      | _ -> failwith "Type error!"
+      | _ -> failwith "EOr eval fail"
     end
   | EEqualsEquals (e1, e2) ->
     begin match eval env e1, eval env e2 with
       | VInt i1, VInt i2 -> VBool (i1 = i2)
       | VBool b1, VBool b2 -> VBool (b1 = b2)
       | VString s1, VString s2 -> VBool (s1 = s2)
-      | _ -> failwith "Type error!"
+      | VNode n1, VNode n2 -> VBool (n1 = n2)
+      | _ -> failwith "EEqualsEquals eval fail"
     end
   | EMap kvpairs -> 
     let rec makemap (kvpairs : (string * expr) list) : (value, value) Hashtbl.t =
@@ -235,12 +236,12 @@ let rec eval_lhs (env : record_env) (lhs : lhs) : lvalue =
         print_endline ("Accessing " ^ var);
         begin match load var env with
           | VMap map -> LVAccess (eval env exp, map)
-          | _ -> failwith "Type error!"
+          | _ -> failwith "LVVar eval_lhs fail"
         end
       | LVAccess (key, table) ->
         begin match Hashtbl.find table key with
           | VMap map -> LVAccess (eval env exp, map)
-          | _ -> failwith "Type error!"
+          | _ -> failwith "LVAccess eval_lhs fail"
         end
       | LVTuple _ -> failwith "Stop accessing maps with tuples"
     end
@@ -284,7 +285,7 @@ let exec (state : state) (program : program) (record : record) =
           let roleName = match node with 
           | EVar v -> v
           | EString s -> s
-          | _ -> failwith "Type error!" in
+          | _ -> failwith "Async type fail" in
           let () = print_endline ("\tAsync " ^ roleName) in 
           (* let node = 
             begin match (eval env nodeVar) with
@@ -303,7 +304,7 @@ let exec (state : state) (program : program) (record : record) =
               let { entry; formals; _ } = function_info func program in
               let new_env = Env.create 91 in
               List.iter2 (fun (formal, _) actual ->
-                  (* print_endline ("formal: " ^ formal);
+                  print_endline ("formal: " ^ formal);
                   begin match actual with
                   | EVar v -> print_endline ("EVar " ^ v)
                   | EInt i -> print_endline ("EInt " ^ string_of_int i)
@@ -312,7 +313,7 @@ let exec (state : state) (program : program) (record : record) =
                   | EMap _ -> print_endline "EMap"
                   | EString s -> print_endline ("EString " ^ s)
                   | _ -> failwith "what type are you"
-                  end; *)
+                  end;
                   Env.add new_env formal (eval env actual))
                 formals
                 actuals;
@@ -351,7 +352,7 @@ let exec (state : state) (program : program) (record : record) =
                 in
                 store lhs (VFuture new_future) env
                 ; state.records <- new_record::state.records
-              | _ -> failwith "Type error!"
+              | _ -> failwith "Type error idk what you are anymore"
               end
           end
         | Assign (lhs, rhs) -> 

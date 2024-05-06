@@ -13,6 +13,7 @@
 %token CLIENT_INTERFACE
 %token COLON
 %token COMMA
+%token DOT
 %token EQUALS
 %token EQUALS_EQUALS
 %token FOR
@@ -27,7 +28,6 @@
 %token NOT_EQUALS
 %token OPTIONS
 %token OR
-%token DOT
 %token RETURN
 %token RPC_ASYNC_CALL
 %token RPC_CALL
@@ -39,7 +39,7 @@
 %left AND
 %left OR
 %nonassoc EQUALS_EQUALS NOT_EQUALS
-%left COMMA
+// %left COMMA
 
 %type <Ast.prog> program
 
@@ -185,8 +185,8 @@ left_side:
     { VarLHS(id) }
   | mapName = ID LEFT_SQUARE_BRACKET key = ID RIGHT_SQUARE_BRACKET
     { MapAccessLHS(mapName, key) }
-  | rhs = right_side DOT key = ID
-    { FieldAccessLHS(rhs, key) } 
+  // | rhs = right_side DOT key = ID
+  //   { FieldAccessLHS(rhs, key) } 
   | l_items = l_items
     { TupleLHS(l_items) }
 
@@ -217,33 +217,31 @@ right_side:
   | func_call = func_call
     { FuncCallRHS(func_call)}
   | literal = literals
-    { Literal(literal) }
+    { LiteralRHS(literal) }
   | b = boolean
     { BoolRHS b }
   | c = collection_literal
     { CollectionRHS c }
-
-exp:
-  | left = left_side EQUALS right = exp
-    { Assignment(left, right)}
-  | rhs = right_side  
-    { RHS(rhs) }
   | rpc_call = rpc_call
-    { RpcCallRHS(rpc_call) }
+    { RpcCallRHS rpc_call }
+  | rhs = right_side DOT key = ID
+    { FieldAccessRHS(rhs, key) }
 
 statement:
   | cond_stmts = cond_stmts
     { CondList(cond_stmts)}
-  | e = exp SEMICOLON
-    { Expr(e) }
-  | RETURN e = exp SEMICOLON
-    { Return(e) }
+  | left = left_side EQUALS right = right_side SEMICOLON
+    { Assignment(left, right)}
+  | r = right_side SEMICOLON
+    { Expr(r) }
+  | RETURN r = right_side SEMICOLON
+    { Return(r) }
   | FOR LEFT_PAREN idx = left_side IN collection = right_side RIGHT_PAREN LEFT_CURLY_BRACE
     body = statements
     RIGHT_CURLY_BRACE
     { ForLoopIn(idx, collection, body) }
-  | AWAIT e = exp SEMICOLON
-    { Await(e) }
+  | AWAIT r = right_side SEMICOLON
+    { Await(r) }
 
 params:
   | rhs = right_side

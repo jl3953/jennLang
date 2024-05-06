@@ -4,7 +4,9 @@ Node {
     map<Key, bool> is_committed = {};
     map<Key, int> versions = {};
     int predecessor = 0;
+    int pred_predecessor = 0;
     int successor = 0;
+    int succ_successor = 0;
     int head = 0;
     int tail = 0;
 
@@ -21,7 +23,12 @@ Node {
     }
 
     func Write(key, value) -> none {
-        if ((role == "Head") || (role == "Mid")) {
+        if (role == "Head") {
+            db[key] = value;
+            is_committed[key] = false;
+            rpc_async_call(successor, Write(key, value));
+            await is_committed[key] == true;
+        } else if (role == "Mid") {
             db[key] = value;
             is_committed[key] = false;
             rpc_async_call(successor, Write(key, value));
@@ -41,9 +48,9 @@ Node {
         is_committed[key] = true;
     }
     
-    func TriggerFailover(failed_node, failed_node_pred, failed_node_succ, new_tail) -> none {
+    func TriggerFailover(failed_node,new_tail) -> none {
         if (failed_node == successor) {
-            successor = failed_node_succ;
+            successor = succ_successor;
             dirty_logs = {};
             for (key, committed in is_committed) {
                 if (!committed) {
@@ -53,7 +60,7 @@ Node {
             rpc_call(successor, PropagateDirtyLogs(dirty_logs));
         }
         if (failed_node == predecessor) {
-            predecessor = failed_node_pred;
+            //predecessor = pred_predecessor;
             clean_logs = {};
             for (key, committed in is_committed) {
                 if (committed) {
@@ -70,10 +77,13 @@ Node {
             rpc_call(tail, PropagateLogsToTail(db));
         }
     }
-    func Init(assigned_role, pred, succ, h, t, data) -> none {
+
+    func Init(assigned_role, pred, pred_pred, succ, succ_succ, h, t, data) -> none {
         role = assigned_role;
         predecessor = pred;
+        pred_predecessor = pred_pred;
         successor = succ;
+        succ_successor = succ_succ;
         head = h;
         tail = t;
         db = {};
@@ -82,9 +92,12 @@ Node {
 
         for (key, value in data) {
             temp = 1;
-            //db[key] = value;
+            db[key] = value;
+            is_committed[key] = true;
+            versions[key] = 0;
         }
     }
+
     // Receiving dirty logs
     func PropagateDirtyLogs(dirty_logs) -> none {
         diff_dirty_logs = {};
@@ -138,15 +151,15 @@ ClientInterface {
         rpc_call(dest, TriggerFailover(failed_node, new_tail));
     }
 
-    func init_head(dest, succ, t, data) -> none {
+    /*func init_head(dest, succ, t, data) -> none {
         rpc_call(dest, Init("Head", dest, succ, dest, t, data));
     }
 
     func init_tail(dest, pred, h, data) -> none {
         rpc_call(dest, Init("Tail", pred, dest, h, dest, data));
-    }
+    }*/
 
-    func init_mid(dest, pred, succ, h, t, data) -> none {
-        rpc_call(dest, Init("Mid", pred, succ, h, t, data));
+    func init(dest, name, pred, pred_pred, succ, succ_succ, h, t, data) -> none {
+        rpc_call(dest, Init(name, pred, pred_pred, succ, succ_succ, h, t, data));
     }
 }

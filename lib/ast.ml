@@ -18,15 +18,15 @@ type boolean =
 | EqualsEquals of rhs * rhs
 | NotEquals of rhs * rhs
 
-(* type rhs = *)
 and rhs = 
   | VarRHS of string
   | MapAccessRHS of string * string
   | FuncCallRHS of func_call
-  | Literal of literal 
+  | LiteralRHS of literal 
   | FieldAccessRHS of rhs * string
   | BoolRHS of boolean
   | CollectionRHS of collection_literal
+  | RpcCallRHS of rpc_call
 
 and collection_literal = 
   | MapLit of (string * rhs) list
@@ -51,21 +51,17 @@ and lhs =
   | FieldAccessLHS of rhs * string
   | TupleLHS of string list
 
-and expr =
-  | Assignment of lhs * expr
-  | RHS of rhs 
-  | RpcCallRHS of rpc_call
-
 (* list of condition to be evaluated * statement body, else condition is just true*)
 type cond_stmt = IfElseIf of rhs * statement list 
 
 and statement =
   | CondList of cond_stmt list 
-  | Expr of expr
-  | Return of expr
+  | Assignment of lhs * rhs
+  | Expr of rhs
+  | Return of rhs
   | ForLoopIn of lhs * rhs * statement list
   | Comment
-  | Await of expr
+  | Await of rhs
 
 type func_def = FuncDef of func_call * type_def * statement list
 

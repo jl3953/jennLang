@@ -6,8 +6,11 @@ open Mylib.Simulator
 (* TOPOLOGIES = ["LINEAR"; "STAR"; "RING"; "FULL"] *)
 let num_servers = 5
 let num_clients = 3
+let chain_len = 3
+let head_idx = 0
+let tail_idx = chain_len - 1
 let topology = "LINEAR"
-let data = 
+let data () : (value, value) Hashtbl.t = 
   let tbl = Hashtbl.create 91 in
   Hashtbl.add tbl (VString "birthday") (VInt 214);
   Hashtbl.add tbl (VString "epoch") (VInt 1980);
@@ -35,7 +38,7 @@ let rec convert_rhs (rhs : rhs) : Simulator.expr =
     begin match func_call with
     | FuncCall(func_name, _) -> failwith ("Didn't implement FuncCallRHS yet func: " ^ func_name)
     end
-  | Literal literal -> 
+  | LiteralRHS literal -> 
     begin match literal with
     | Options _ -> failwith "Didn't implement Options yet"
     | String s -> EString(s)
@@ -56,6 +59,7 @@ let rec convert_rhs (rhs : rhs) : Simulator.expr =
     | MapLit kvpairs -> EMap (List.map (fun (k, v) -> (k, convert_rhs v)) kvpairs);
     | ListLit items -> EList (List.map (fun (v) -> convert_rhs v) items)
     end
+  | RpcCallRHS _ -> failwith "Didn't implement RpcCallRHS yet"
 
 let rec generate_cfg_from_stmts (stmts : statement list) (cfg : CFG.t) (last_vert : CFG.vertex) : CFG.vertex =
   match stmts with
@@ -68,16 +72,11 @@ let rec generate_cfg_from_stmts (stmts : statement list) (cfg : CFG.t) (last_ver
         let next = generate_cfg_from_stmts rest cfg last_vert in
         generate_cfg_from_cond_stmts cond_stmts cfg next
       end
+    | Assignment (lhs, exp) -> 
+      let lhs_vert = CFG.create_vertex cfg (Instr(Assign(convert_lhs lhs, EVar "ret"), next_vert)) in
+      generate_cfg_from_stmts [Expr exp] cfg lhs_vert
     | Expr expr -> 
       begin match expr with
-      | Assignment (lhs, exp) -> 
-        let lhs_vert = CFG.create_vertex cfg (Instr(Assign(convert_lhs lhs, EVar "ret"), next_vert)) in
-        begin match exp with
-        | Assignment _ -> failwith "Don't assign an Assignment"
-        | RHS _
-        | RpcCallRHS _ -> generate_cfg_from_stmts [Expr exp] cfg lhs_vert
-        end
-      | RHS rhs -> CFG.create_vertex cfg (Instr(Assign(LVar "ret", convert_rhs rhs), next_vert))
       | RpcCallRHS rpc_call -> 
         begin match rpc_call with
           | RpcCall(node, func_call) -> 
@@ -99,14 +98,11 @@ let rec generate_cfg_from_stmts (stmts : statement list) (cfg : CFG.t) (last_ver
                 CFG.create_vertex cfg (Instr(Async(LVar "ret", EVar node, func_name, actuals), next_vert))
             end
           end
+      | rhs -> CFG.create_vertex cfg (Instr(Assign(LVar "ret", convert_rhs rhs), next_vert))
       end
     | Return exp -> 
       let ret_vert = CFG.create_vertex cfg (Return (EVar "ret")) in
-      begin match exp with
-      | Assignment _ -> failwith "Don't Return an Assignment"
-      | RHS _
-      | RpcCallRHS _ -> generate_cfg_from_stmts [Expr exp] cfg ret_vert
-      end
+      generate_cfg_from_stmts [Expr exp] cfg ret_vert
     | ForLoopIn (idx, collection, body) -> 
       let for_vert = CFG.fresh_vertex cfg in
       (* let ret_vert = CFG.create_vertex cfg (Return(EBool true)) in *)
@@ -115,12 +111,7 @@ let rec generate_cfg_from_stmts (stmts : statement list) (cfg : CFG.t) (last_ver
       let local_copy_vert = CFG.create_vertex cfg (Instr(Assign(LVar "local_copy", convert_rhs collection), for_vert)) in
       local_copy_vert
     | Comment -> generate_cfg_from_stmts rest cfg last_vert
-    | Await exp -> 
-      begin match exp with
-      | Assignment _ -> failwith "Don't Await an Assignment"
-      | RHS rhs -> CFG.create_vertex cfg (Await (LVar "ret", convert_rhs rhs, next_vert))
-      | RpcCallRHS _ -> failwith "Don't Await an RpcCallRHS"
-      end
+    | Await exp -> CFG.create_vertex cfg (Await(LVar "ret", convert_rhs exp, next_vert))
     end
 
 and generate_cfg_from_cond_stmts (cond_stmts : cond_stmt list) (cfg : CFG.t) (next : CFG.vertex) : CFG.vertex =
@@ -220,30 +211,47 @@ let parse_file (filename : string) : prog =
 let init_topology (topology : string) (global_state : state) (prog : program) : unit =
   match topology with
   | "LINEAR" -> 
-    let head_idx = 0
-    and tail_idx = num_servers - 1 in
-    schedule_client global_state prog "init_head" [
-      VNode head_idx
-    ; VNode (head_idx + 1)
-    ; VNode tail_idx
-    ; VMap data] 0;
+    schedule_client global_state prog "init" [
+      VNode head_idx (* dest *)
+    ; VString "Head" (* name *)
+    ; VNode ((head_idx - 1) + num_servers) (* pred *)
+    ; VNode ((head_idx - 2) + num_servers) (* pred_pred *)
+    ; VNode ((head_idx + 1) mod num_servers) (* succ *)
+    ; VNode ((head_idx + 2) mod num_servers) (* succ_succ *)
+    ; VNode head_idx (* head *)
+    ; VNode tail_idx (* tail *)
+    ; VMap (data ())] 0;
+    print_endline "init head";
+    (* Hashtbl.iter (fun _ _ -> print_endline "+1") data; *)
     sync_exec global_state prog;
-    schedule_client global_state prog "init_tail" [
-      VNode tail_idx
-    ; VNode (tail_idx - 1)
+    schedule_client global_state prog "init" [
+      VNode tail_idx (* dest *)
+    ; VString "Tail" (* name *)
+    ; VNode ((tail_idx - 1) mod num_servers) (* pred *)
+    ; VNode ((tail_idx - 2) mod num_servers) (* pred_pred *)
+    ; VNode ((tail_idx + 1) mod num_servers) (* succ *)
+    ; VNode ((tail_idx + 2) mod num_servers) (* succ_succ *)
     ; VNode head_idx
-    ; VMap data] 0;
+    ; VNode tail_idx
+    ; VMap (data ())] 0;
+    print_endline "init tail";
+    (* Hashtbl.iter (fun _ _ -> print_endline "+1") data; *)
     sync_exec global_state prog;
-    for i = 1 to num_servers - 2 do
-      schedule_client global_state prog "init_mid" [
-        VNode i
-      ; VNode (i - 1)
-      ; VNode (i + 1)
+    for i = 1 to chain_len - 2 do
+      schedule_client global_state prog "init" [
+        VNode i (* dest *)
+      ; VString "Mid" (* name *)
+      ; VNode ((i - 1) mod num_servers) (* pred *)
+      ; VNode ((i - 2) + num_servers) (* pred_pred *)
+      ; VNode ((i + 1) mod num_servers) (* succ *)
+      ; VNode ((i + 2) mod num_servers) (* succ_succ *)
       ; VNode head_idx
       ; VNode tail_idx
-      ; VMap data] 0;
-      sync_exec global_state prog
-    done
+      ; VMap (data ())] 0;
+      sync_exec global_state prog;
+      (* Hashtbl.iter (fun _ _ -> print_endline "+1") data; *)
+      print_endline "init mid";
+    done;
 
   | "STAR" -> raise (Failure "Not implemented STAR topology")
   | "RING" -> raise (Failure "Not implemented RING topology")
@@ -258,7 +266,22 @@ let print_single_node (node : (value Env.t)) =
     | VString s -> print_endline (key ^ ": " ^ s)
     | VNode n -> print_endline (key ^ ": " ^ (string_of_int n))
     | VFuture _ -> print_endline (key ^ ": VFuture")
-    | VMap _ -> print_endline (key ^ ": VMap")
+    | VMap m -> 
+      print_endline (key ^ ": VMap iterations");
+      Hashtbl.iter (fun k_str v -> 
+        let k = match k_str with
+        | VString s -> s
+        | _ -> failwith "Key is not a string" in
+        match v with
+        | VInt i -> print_endline ("\t" ^ k ^ ": " ^ (string_of_int i))
+        | VBool b -> print_endline ("\t" ^ k ^ ": " ^ (string_of_bool b)) 
+        | VString s -> print_endline ("\t" ^ k ^ ": " ^ s)
+        | VNode n -> print_endline ("\t" ^ k ^ ": " ^ (string_of_int n))
+        | VFuture _ -> print_endline ("\t" ^ k ^ ": VFuture")
+        | VMap _ -> print_endline ("\t" ^ k ^ ": VMap")
+        | VOption _ -> print_endline ("\t" ^ k ^ ": VOptions")
+        | VList _ -> print_endline ("\t" ^ k ^ ": VList")
+      ) m;
     | VOption _ -> print_endline (key ^ ": VOptions")
     | VList _ -> print_endline (key ^ ": VList")
   ) node
@@ -277,10 +300,14 @@ let interp (f : string) : unit =
     let ast = parse_file f in 
     process_program ast in 
   init_topology topology global_state prog;
-  schedule_client global_state prog "write" [VNode 0; VString "birthday"; VString "812"] 0;
+  (* schedule_client global_state prog "write" [VNode 0; VString "birthday"; VString "812"] 0;
   sync_exec global_state prog;
   schedule_client global_state prog "read" [VNode 0; VString "birthday"] 0;
+  sync_exec global_state prog; *)
+  (* schedule_client global_state prog "triggerFailover" [VNode 0; VNode 1; VNode 3] 0;
   sync_exec global_state prog;
+  schedule_client global_state prog "triggerFailover" [VNode 2; VNode 1; VNode 3] 0;
+  sync_exec global_state prog; *)
   
   let oc = open_out "output.csv" in
   Printf.fprintf oc "ClientID,Kind,Action,Payload,Value\n";
