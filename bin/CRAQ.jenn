@@ -9,6 +9,7 @@ Node {
     int succ_successor = 0;
     int head = 0;
     int tail = 0;
+    int self = 0;
 
     func Read(key) -> Value {
         if ((role == "Head") || (role == "Mid")) {
@@ -71,14 +72,14 @@ Node {
         }
 
         tail = new_tail;
-        if (role == "Tail") {
+        if ((role == "Tail") && (new_tail != self)) {
             role = "Mid";
             successor = tail;
             rpc_call(tail, PropagateLogsToTail(db));
         }
     }
 
-    func Init(assigned_role, pred, pred_pred, succ, succ_succ, h, t, data) -> none {
+    func Init(assigned_role, pred, pred_pred, succ, succ_succ, h, t, s, data) -> none {
         role = assigned_role;
         predecessor = pred;
         pred_predecessor = pred_pred;
@@ -89,6 +90,7 @@ Node {
         db = {};
         is_committed = {};
         versions = {};
+        self = s;
 
         for (key, value in data) {
             temp = 1;
@@ -158,7 +160,7 @@ ClientInterface {
         rpc_call(dest, Init("Tail", pred, dest, h, dest, data));
     }*/
 
-    func init(dest, name, pred, pred_pred, succ, succ_succ, h, t, data) -> none {
-        rpc_call(dest, Init(name, pred, pred_pred, succ, succ_succ, h, t, data));
+    func init(dest, name, pred, pred_pred, succ, succ_succ, head, tail, self, data) -> none {
+        rpc_call(dest, Init(name, pred, pred_pred, succ, succ_succ, head, tail, self, data));
     }
 }

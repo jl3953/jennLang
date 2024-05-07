@@ -227,6 +227,7 @@ let init_topology (topology : string) (global_state : state) (prog : program) : 
       ; VNode (mod_op (i+2) num_servers) (* succ_succ *)
       ; VNode head_idx
       ; VNode tail_idx
+      ; VNode i
       ; VMap (data ())] 0;
       sync_exec global_state prog;
       (* Hashtbl.iter (fun _ _ -> print_endline "+1") data; *)
@@ -241,6 +242,7 @@ let init_topology (topology : string) (global_state : state) (prog : program) : 
     ; VNode (mod_op (head_idx+2)num_servers) (* succ_succ *)
     ; VNode head_idx (* head *)
     ; VNode tail_idx (* tail *)
+    ; VNode head_idx
     ; VMap (data ())] 0;
     print_endline "init head";
     (* Hashtbl.iter (fun _ _ -> print_endline "+1") data; *)
@@ -253,6 +255,7 @@ let init_topology (topology : string) (global_state : state) (prog : program) : 
     ; VNode (mod_op (tail_idx+1) num_servers) (* succ *)
     ; VNode (mod_op (tail_idx+2) num_servers) (* succ_succ *)
     ; VNode head_idx
+    ; VNode tail_idx
     ; VNode tail_idx
     ; VMap (data ())] 0;
     print_endline "init tail";
@@ -313,6 +316,12 @@ let interp (f : string) : unit =
   schedule_client global_state prog "triggerFailover" [VNode 0; VNode 1; VNode 3] 0;
   sync_exec global_state prog;
   schedule_client global_state prog "triggerFailover" [VNode 2; VNode 1; VNode 3] 0;
+  sync_exec global_state prog;
+  schedule_client global_state prog "triggerFailover" [VNode 3; VNode 1; VNode 3] 0;
+  sync_exec global_state prog;
+  schedule_client global_state prog "write" [VNode 0; VString "university"; VString "Princeton"] 0;
+  sync_exec global_state prog;
+  schedule_client global_state prog "read" [VNode 0; VString "university"] 0;
   sync_exec global_state prog;
   
   let oc = open_out "output.csv" in
