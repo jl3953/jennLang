@@ -46,6 +46,7 @@ type lhs =
 type instr =
   | Assign of lhs * expr (* jenndbg probably assigning map values? *)
   | Async of lhs * expr * string * (expr list) (* jenndbg RPC*) 
+  | Copy of lhs * expr
   (* | Write of string * string (*jenndbg write a value *) *)
 [@@deriving ord]
 
@@ -260,13 +261,27 @@ let store (lhs : lhs) (vl : value) (env : record_env) : unit =
         Env.replace env.node_env var vl
       end
   | LVAccess (key, table) ->
-    Hashtbl.add table key vl
+    Hashtbl.replace table key vl
   | LVTuple _ -> failwith "how to store LVTuples?"
 
 exception Halt
 
+let copy (lhs : lhs) (vl : value) (env : record_env) : unit =
+  match eval_lhs env lhs with 
+  | LVVar var ->
+    begin match vl with
+    | VMap m -> 
+      let temp = Hashtbl.copy m in
+      Env.replace env.local_env var (VMap temp)
+    | VList l ->
+      let temp = List.map (fun x -> x) l in
+      Env.replace env.local_env var (VList temp)
+    | _ -> failwith "no copying non-collections"
+    end
+  | _ -> failwith "copying only to local_copy"
+
 let function_info name program = 
-  (* print_endline ("rpc name: " ^ name);  *)
+  print_endline ("rpc name: " ^ name); 
   Env.find program.rpc name
 
 (* Execute record until pause/return.  Invariant: record does *not* belong to
@@ -382,6 +397,7 @@ let exec (state : state) (program : program) (record : record) =
           | VNode n -> print_endline ("\t\tVNode " ^ string_of_int n)
           end;
           store lhs (eval env rhs) env;
+        | Copy (lhs, rhs) -> copy lhs (eval env rhs) env;
       end;
       loop ()
     | Cond (cond, bthen, belse) -> 

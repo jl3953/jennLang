@@ -17,6 +17,12 @@ let data () : (value, value) Hashtbl.t =
   Hashtbl.add tbl (VString "name") (VString "Jennifer");
   tbl
 
+let mod_op (i : int) (m : int): int = 
+  if i < 0 then
+    i + m
+  else
+    i mod m
+
 let global_state = 
       { nodes = Array.init (num_servers + num_clients) (fun _ -> Env.create 91) 
       ; records = []
@@ -108,7 +114,7 @@ let rec generate_cfg_from_stmts (stmts : statement list) (cfg : CFG.t) (last_ver
       (* let ret_vert = CFG.create_vertex cfg (Return(EBool true)) in *)
       let body_vert = generate_cfg_from_stmts body cfg for_vert in
       CFG.set_label cfg for_vert (ForLoopIn(convert_lhs idx, EVar "local_copy", body_vert, next_vert));
-      let local_copy_vert = CFG.create_vertex cfg (Instr(Assign(LVar "local_copy", convert_rhs collection), for_vert)) in
+      let local_copy_vert = CFG.create_vertex cfg (Instr(Copy (LVar "local_copy", convert_rhs collection), for_vert)) in
       local_copy_vert
     | Comment -> generate_cfg_from_stmts rest cfg last_vert
     | Await exp -> CFG.create_vertex cfg (Await(LVar "ret", convert_rhs exp, next_vert))
@@ -211,13 +217,28 @@ let parse_file (filename : string) : prog =
 let init_topology (topology : string) (global_state : state) (prog : program) : unit =
   match topology with
   | "LINEAR" -> 
+    for i = 0 to num_servers - 1 do
+      schedule_client global_state prog "init" [
+        VNode i (* dest *)
+      ; VString "Mid" (* name *)
+      ; VNode (mod_op (i-1) num_servers) (* pred *)
+      ; VNode (mod_op (i-2) num_servers) (* pred_pred *)
+      ; VNode (mod_op (i+1) num_servers) (* succ *)
+      ; VNode (mod_op (i+2) num_servers) (* succ_succ *)
+      ; VNode head_idx
+      ; VNode tail_idx
+      ; VMap (data ())] 0;
+      sync_exec global_state prog;
+      (* Hashtbl.iter (fun _ _ -> print_endline "+1") data; *)
+      print_endline "init mid";
+    done;
     schedule_client global_state prog "init" [
       VNode head_idx (* dest *)
     ; VString "Head" (* name *)
-    ; VNode ((head_idx - 1) + num_servers) (* pred *)
-    ; VNode ((head_idx - 2) + num_servers) (* pred_pred *)
-    ; VNode ((head_idx + 1) mod num_servers) (* succ *)
-    ; VNode ((head_idx + 2) mod num_servers) (* succ_succ *)
+    ; VNode (mod_op (head_idx-1) num_servers) (* pred *)
+    ; VNode (mod_op (head_idx-2) num_servers) (* pred_pred *)
+    ; VNode (mod_op (head_idx+1) num_servers) (* succ *)
+    ; VNode (mod_op (head_idx+2)num_servers) (* succ_succ *)
     ; VNode head_idx (* head *)
     ; VNode tail_idx (* tail *)
     ; VMap (data ())] 0;
@@ -227,31 +248,16 @@ let init_topology (topology : string) (global_state : state) (prog : program) : 
     schedule_client global_state prog "init" [
       VNode tail_idx (* dest *)
     ; VString "Tail" (* name *)
-    ; VNode ((tail_idx - 1) mod num_servers) (* pred *)
-    ; VNode ((tail_idx - 2) mod num_servers) (* pred_pred *)
-    ; VNode ((tail_idx + 1) mod num_servers) (* succ *)
-    ; VNode ((tail_idx + 2) mod num_servers) (* succ_succ *)
+    ; VNode (mod_op (tail_idx-1) num_servers) (* pred *)
+    ; VNode (mod_op (tail_idx-2) num_servers) (* pred_pred *)
+    ; VNode (mod_op (tail_idx+1) num_servers) (* succ *)
+    ; VNode (mod_op (tail_idx+2) num_servers) (* succ_succ *)
     ; VNode head_idx
     ; VNode tail_idx
     ; VMap (data ())] 0;
     print_endline "init tail";
     (* Hashtbl.iter (fun _ _ -> print_endline "+1") data; *)
     sync_exec global_state prog;
-    for i = 1 to chain_len - 2 do
-      schedule_client global_state prog "init" [
-        VNode i (* dest *)
-      ; VString "Mid" (* name *)
-      ; VNode ((i - 1) mod num_servers) (* pred *)
-      ; VNode ((i - 2) + num_servers) (* pred_pred *)
-      ; VNode ((i + 1) mod num_servers) (* succ *)
-      ; VNode ((i + 2) mod num_servers) (* succ_succ *)
-      ; VNode head_idx
-      ; VNode tail_idx
-      ; VMap (data ())] 0;
-      sync_exec global_state prog;
-      (* Hashtbl.iter (fun _ _ -> print_endline "+1") data; *)
-      print_endline "init mid";
-    done;
 
   | "STAR" -> raise (Failure "Not implemented STAR topology")
   | "RING" -> raise (Failure "Not implemented RING topology")
@@ -300,14 +306,14 @@ let interp (f : string) : unit =
     let ast = parse_file f in 
     process_program ast in 
   init_topology topology global_state prog;
-  (* schedule_client global_state prog "write" [VNode 0; VString "birthday"; VString "812"] 0;
+  schedule_client global_state prog "write" [VNode 0; VString "birthday"; VInt 812] 0;
   sync_exec global_state prog;
   schedule_client global_state prog "read" [VNode 0; VString "birthday"] 0;
-  sync_exec global_state prog; *)
-  (* schedule_client global_state prog "triggerFailover" [VNode 0; VNode 1; VNode 3] 0;
+  sync_exec global_state prog; 
+  schedule_client global_state prog "triggerFailover" [VNode 0; VNode 1; VNode 3] 0;
   sync_exec global_state prog;
   schedule_client global_state prog "triggerFailover" [VNode 2; VNode 1; VNode 3] 0;
-  sync_exec global_state prog; *)
+  sync_exec global_state prog;
   
   let oc = open_out "output.csv" in
   Printf.fprintf oc "ClientID,Kind,Action,Payload,Value\n";
@@ -334,6 +340,6 @@ let interp (f : string) : unit =
     print_global_nodes global_state.nodes;
 ;;
   
-interp "/Users/jenniferlam/jennLang/bin/CRAQ.jenn"
+interp "/home/jennifer/jennLang/bin/CRAQ.jenn"
 let () = print_endline "Program recognized as valid!"
 let () = print_endline "Program ran successfully!"

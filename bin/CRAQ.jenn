@@ -60,7 +60,7 @@ Node {
             rpc_call(successor, PropagateDirtyLogs(dirty_logs));
         }
         if (failed_node == predecessor) {
-            //predecessor = pred_predecessor;
+            predecessor = pred_predecessor;
             clean_logs = {};
             for (key, committed in is_committed) {
                 if (committed) {
@@ -125,12 +125,12 @@ Node {
     }
 
     
-    func PropagageLogsToTail(other_db) -> none {
-        if (role == "Tail") {
-            for (key, value in other_db) {
-                db[key] = value;
-            }
-        } 
+    func PropagateLogsToTail(other_db) -> none {
+        role = "Tail";
+        tail = 
+        for (key, value in other_db) {
+            db[key] = value;
+        }
     }
 }
 
