@@ -127,7 +127,6 @@ Node {
     
     func PropagateLogsToTail(other_db) -> none {
         role = "Tail";
-        tail = 
         for (key, value in other_db) {
             db[key] = value;
         }
