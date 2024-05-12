@@ -12,15 +12,15 @@ Node {
     int self = 0;
 
     func Read(key) -> Value {
-        if ((role == "Head") || (role == "Mid")) {
+        /*if ((role == "Head") || (role == "Mid")) {
             if (!is_committed[key]) {
                 return rpc_call(tail, Read(key));
             } else {
                 return db[key];
             }
-        } else {
+        } else {*/
             return db[key];
-        }
+        //}
     }
 
     func Write(key, value) -> none {

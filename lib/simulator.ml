@@ -116,6 +116,20 @@ end = struct
     id
 end
 
+type op_type = 
+  | Read
+  | Write
+  | ClientReq
+  | Other
+
+type header =
+  { 
+    (* src: int; *)
+    dst: int;
+    typ: op_type;
+    (* key: string; *)
+  }
+
 (* Activation records *)
 (* jenndbg I think nodes are uniquely identified by their IDs *)
 (* jenndbg I think a record is a type of vertex*)
@@ -126,9 +140,11 @@ type record =
                                     For RPCs, this writes to the associate future;
                                     For client operations it appends to the history *)
   ; env : value Env.t 
-  ; id : int }
+  ; id : int
+  ; tags : header }
 
 type op_kind = Invocation | Response
+
 
 type operation =
   { client_id : int
@@ -162,6 +178,13 @@ type program =
   { cfg : CFG.t (* jenndbg this is its control flow *)
   ; rpc : function_info Env.t 
   ; client_ops : function_info Env.t }(* jenndbg why does an RPC handler need a list of function info *)
+
+let assign_tags (func_name : string) : op_type =
+  match func_name with
+  | "Read" -> Read
+  | "AckWrite"
+  | "Write" -> Write 
+  | _ -> Other 
 
 let load (var : string) (env : record_env) : value =
   try begin 
@@ -337,7 +360,12 @@ let exec (state : state) (program : program) (record : record) =
                 ; pc = entry
                 ; continuation = (fun value -> new_future := Some value)
                 ; env = new_env
-                ; id = record.id}
+                ; id = record.id
+                ; tags = { 
+                  (* src = record.node; *)
+                  dst = node_id;
+                  typ = assign_tags func
+                  }}
               in
               store lhs (VFuture new_future) env
               ; state.records <- new_record::state.records
@@ -363,7 +391,12 @@ let exec (state : state) (program : program) (record : record) =
                   ; pc = entry
                   ; continuation = (fun value -> new_future := Some value)
                   ; env = new_env 
-                  ; id = record.id}
+                  ; id = record.id
+                  ; tags = { 
+                    (* src = record.node; *)
+                    dst = node_id;
+                    typ = assign_tags func
+                    }}
                 in
                 store lhs (VFuture new_future) env
                 ; state.records <- new_record::state.records
@@ -500,7 +533,43 @@ let exec (state : state) (program : program) (record : record) =
   in
   loop ()
 
-let schedule_record (state : state) (program : program) (unique_id: int) : unit =
+let should_choose (r : record) (rejections : int) (threshold : int) (_ : program): bool =
+  if threshold == 0 then true else
+    if rejections == threshold then true else
+      (*match (CFG.label program.cfg r.pc) with
+      | Await (_, _, _) -> false
+      | _ ->  *)
+    match r.tags.typ with
+    | Write -> 
+      print_endline ("write, rejections " ^ string_of_int rejections ^ " threshold " ^ string_of_int threshold);
+      if (Random.float 1.0) < 0.7 then false else true
+    | Read -> 
+      print_endline ("read, rejections " ^ string_of_int rejections ^ " threshold " ^ string_of_int threshold);
+      if (Random.float 1.0) < 0.3 then false else true
+    | _ -> 
+      print_endline ("other, rejections " ^ string_of_int rejections ^ " threshold " ^ string_of_int threshold);
+      if (Random.float 1.0) < 0.1 then false else true
+
+(* Choose a record to execute, execute it, and remove it from the list of
+   records. *)
+let schedule_record (state : state) (program : program) : unit =
+  if List.length state.records > 0 then
+    begin
+    let rec pick before after =
+      match after with
+      | [] -> raise Halt
+      | (r::rs) -> 
+        print_endline ("num records " ^ string_of_int (List.length state.records));
+        if (should_choose r (List.length before) ((List.length state.records)-1) program) then begin
+          state.records <- List.rev_append before rs;
+          exec state program r
+        end else
+          pick (r::before) rs
+    in
+    pick [] state.records
+  end
+
+(* let schedule_record (state : state) (program : program) (unique_id: int) : unit =
   print_int (List.length state.records);
   print_endline " scheduling records left";
   if unique_id > 0 then
@@ -547,7 +616,7 @@ let schedule_record (state : state) (program : program) (unique_id: int) : unit 
     print_endline "";
     pick rando [] state.records
     (* pick 0 [] state.records *)
-  end
+  end *)
 
 (* Choose a client without a pending operation, create a new activation record
    to execute it, and append the invocation to the history *)
@@ -598,7 +667,13 @@ let schedule_client (state : state) (program : program) (func_name : string) (ac
           ; node = c
           ; continuation = continuation
           ; env = env 
-          ; id = unique_id }
+          ; id = unique_id
+          ; tags = { 
+            (* src = 0;  *)
+            dst = c; 
+            typ = assign_tags func_name 
+            (* key = "key"  *)
+            }}
         in
         state.free_clients <- List.rev_append before cs;
         DA.add state.history invocation;

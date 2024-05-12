@@ -204,7 +204,8 @@ let process_program (prog : prog) : program =
 
 let sync_exec (global_state : state) (prog : program) : unit = 
   while not ((List.length global_state.records) = 0) do
-    schedule_record global_state prog (-1)
+    schedule_record global_state prog;
+    (* schedule_record global_state prog (-1) *)
   done
 
 let parse_file (filename : string) : prog =
@@ -310,18 +311,18 @@ let interp (f : string) : unit =
     process_program ast in 
   init_topology topology global_state prog;
   schedule_client global_state prog "write" [VNode 0; VString "birthday"; VInt 812] 0;
-  sync_exec global_state prog;
-  schedule_client global_state prog "read" [VNode 0; VString "birthday"] 0;
-  sync_exec global_state prog; 
-  schedule_client global_state prog "triggerFailover" [VNode 0; VNode 1; VNode 3] 0;
+  (* sync_exec global_state prog; *)
+  schedule_client global_state prog "read" [VNode 2; VString "birthday"] 0;
+  (* sync_exec global_state prog;  *)
+  (* schedule_client global_state prog "triggerFailover" [VNode 0; VNode 1; VNode 3] 0;
   sync_exec global_state prog;
   schedule_client global_state prog "triggerFailover" [VNode 2; VNode 1; VNode 3] 0;
   sync_exec global_state prog;
   schedule_client global_state prog "triggerFailover" [VNode 3; VNode 1; VNode 3] 0;
-  sync_exec global_state prog;
-  schedule_client global_state prog "write" [VNode 0; VString "university"; VString "Princeton"] 0;
-  sync_exec global_state prog;
-  schedule_client global_state prog "read" [VNode 0; VString "university"] 0;
+  sync_exec global_state prog; *)
+  (* schedule_client global_state prog "write" [VNode 0; VString "university"; VString "Princeton"] 0; *)
+  (* sync_exec global_state prog; *)
+  schedule_client global_state prog "read" [VNode 0; VString "birthday"] 0;
   sync_exec global_state prog;
   
   let oc = open_out "output.csv" in
@@ -349,6 +350,6 @@ let interp (f : string) : unit =
     print_global_nodes global_state.nodes;
 ;;
   
-interp "/home/jennifer/jennLang/bin/CRAQ.jenn"
+interp "/Users/jenniferlam/jennLang/bin/CRAQ.jenn"
 let () = print_endline "Program recognized as valid!"
 let () = print_endline "Program ran successfully!"
