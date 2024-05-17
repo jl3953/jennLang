@@ -312,7 +312,7 @@ let interp (f : string) : unit =
   init_topology topology global_state prog;
   schedule_client global_state prog "write" [VNode 0; VString "birthday"; VInt 812] 0;
   (* sync_exec global_state prog; *)
-  schedule_client global_state prog "read" [VNode 2; VString "birthday"] 0;
+  schedule_client global_state prog "read" [VNode 2; VString "birthday"] 0; (* TODO jenndebug hold one op and release the other*)
   (* sync_exec global_state prog;  *)
   (* schedule_client global_state prog "triggerFailover" [VNode 0; VNode 1; VNode 3] 0;
   sync_exec global_state prog;

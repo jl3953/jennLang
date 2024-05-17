@@ -534,8 +534,8 @@ let exec (state : state) (program : program) (record : record) =
   loop ()
 
 let should_choose (r : record) (rejections : int) (threshold : int) (_ : program): bool =
-  if threshold == 0 then true else
-    if rejections == threshold then true else
+  if threshold = 0 then true else
+    if rejections = threshold then true else
       (*match (CFG.label program.cfg r.pc) with
       | Await (_, _, _) -> false
       | _ ->  *)
@@ -625,7 +625,7 @@ let schedule_client (state : state) (program : program) (func_name : string) (ac
     match after with
     | [] -> raise Halt 
     | (c::cs) ->
-      if n == 0 then begin
+      if n = 0 then begin
         let op =
           print_endline ("func_name: " ^ func_name);
           Env.find program.client_ops func_name
