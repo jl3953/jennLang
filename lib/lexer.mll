@@ -62,7 +62,7 @@ and token = parse
   | ')' {RIGHT_PAREN}
   | '[' {LEFT_SQUARE_BRACKET}
   | ']' {RIGHT_SQUARE_BRACKET}
-  | '.' {DOT}
+  (* | '.' {DOT} *)
   | ':' {COLON}
   | ';' {SEMICOLON}
   | '"' {QUOTE}
