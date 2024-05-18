@@ -1,6 +1,7 @@
 Node {
     string role = "";
     map<Key, Value> db = {};
+    map<Key, Value> database = {};
     map<Key, bool> is_committed = {};
     map<Key, int> versions = {};
     int predecessor = 0;
@@ -23,30 +24,75 @@ Node {
         }
     }
 
-    func Write(key, value) -> none {
-        if (role == "Head") {
-            db[key] = value;
-            is_committed[key] = false;
-            rpc_async_call(successor, Write(key, value));
-            await is_committed[key] == true;
+    func Write(key, val) -> none {
+        if ((role == "Head")) {
+            if (contains(database, key) == false) {
+                database[key] = [];
+            }
+            idx = len(database[key]);
+
+            database[key] = append(database[key], {
+                value: val, 
+                committed: false
+            });
+            record = database[key][idx];
+            committed = "committed";
+            rpc_async_call(successor, Write(key, val));
+            await record[committed] == true;
+            
+            /*await record[committed];
+            await database[key][idx][is_committed] == true;*/
+
+            //db[key] = val;
+            //is_committed[key] = false;
+            //rpc_async_call(successor, Write(key, val));
+            //await is_committed[key] == true;
         } else if (role == "Mid") {
-            db[key] = value;
-            is_committed[key] = false;
-            rpc_async_call(successor, Write(key, value));
-            await is_committed[key] == true;
-            rpc_async_call(predecessor, AckWrite(key, value));
+            if (contains(database, key) == false) {
+                database[key] = [];
+            }
+            idx = len(database[key]);
+
+            database[key] = append(database[key], {
+                value: val, 
+                committed: false
+            });
+
+            record = database[key][idx];
+            committed = "committed";
+            rpc_async_call(successor, Write(key, val));
+            await record[committed] == true;
+
+            //db[key] = val;
+            //is_committed[key] = false;
+            //rpc_async_call(successor, Write(key, val));
+            //await is_committed[key] == true;
+
+            rpc_async_call(predecessor, AckWrite(key, idx));
         } else {
+            if (contains(database, key) == false) {
+                database[key] = [];
+            }
+            idx = len(database[key]);
+
+            database[key] = append(database[key], {
+                value: val, 
+                committed: true
+            });
             // role == "Tail"
-            db[key] = value;
-            is_committed[key] = true;
-            rpc_async_call(predecessor, AckWrite(key, value));
+            //db[key] = val;
+            //is_committed[key] = true;
+            rpc_async_call(predecessor, AckWrite(key, idx));
         }
     }
     
 
-    func AckWrite(key, value) -> none {
+    func AckWrite(key, idx) -> none {
         // check version
         is_committed[key] = true;
+        record = database[key][idx];
+        committed = "committed";
+        record[committed] = true;
     }
     
     func TriggerFailover(failed_node,new_tail) -> none {
@@ -91,12 +137,15 @@ Node {
         is_committed = {};
         versions = {};
         self = s;
+        database = {};
 
-        for (key, value in data) {
+        for (key, val in data) {
             temp = 1;
-            db[key] = value;
+            db[key] = val;
             is_committed[key] = true;
             versions[key] = 0;
+
+            database[key] = [{value: val, committed: true}];
         }
     }
 

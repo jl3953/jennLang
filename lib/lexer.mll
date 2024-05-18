@@ -70,15 +70,18 @@ and token = parse
   | "!=" {NOT_EQUALS}
   | "&&" {AND}
   | "||" {OR}
+  | "append" { APPEND }
   | "await" { AWAIT }
   | "true" { TRUE true }
   | "false" { FALSE false }
+  | "contains" { CONTAINS }
   | "func" { FUNC }
   | "if" { IF }
   | "else if" { ELSEIF }
   | "else" { ELSE }
   | "for" { FOR }
   | "in" { IN }
+  | "len" { LEN }
   | "map" { MAP }
   | "Options" { OPTIONS }
   | "return" { RETURN }

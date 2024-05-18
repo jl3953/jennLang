@@ -7,6 +7,7 @@
 %token <bool> TRUE FALSE
 %token <int> INT
 %token AND
+%token APPEND
 %token ARROW
 %token AWAIT
 %token BANG
@@ -16,6 +17,7 @@
 // %token DOT
 %token EQUALS
 %token EQUALS_EQUALS
+%token CONTAINS
 %token FOR
 %token FUNC
 %token IF ELSEIF ELSE
@@ -24,6 +26,7 @@
 %token LEFT_CURLY_BRACE RIGHT_CURLY_BRACE 
 %token LEFT_PAREN RIGHT_PAREN 
 %token LEFT_SQUARE_BRACKET RIGHT_SQUARE_BRACKET
+%token LEN
 %token MAP
 %token NOT_EQUALS
 %token OPTIONS
@@ -137,7 +140,6 @@ kv_pairs:
   | key = ID COLON value = right_side COMMA kvs = kv_pairs
     { (key, value)::kvs }
 
-
 items:
   | rhs = right_side
     { rhs :: [] }
@@ -189,6 +191,8 @@ left_side:
   //   { FieldAccessLHS(rhs, key) } 
   | l_items = l_items
     { TupleLHS(l_items) }
+  // | map = left_side LEFT_SQUARE_BRACKET key = ID RIGHT_SQUARE_BRACKET
+  //   { MapAccessLHS(map, key) }
 
 
 boolean:
@@ -208,12 +212,16 @@ boolean:
     { NotEquals (rhs1, rhs2)}
   | LEFT_PAREN b = boolean RIGHT_PAREN
     { b }
+  | CONTAINS LEFT_PAREN map = right_side COMMA key = right_side RIGHT_PAREN
+    { Contains(map, key) }
 
 right_side:
   | id = ID
     { VarRHS(id) }
-  | mapName = ID LEFT_SQUARE_BRACKET key = ID RIGHT_SQUARE_BRACKET
-    { MapAccessRHS(mapName, key) }
+  // | mapName = ID LEFT_SQUARE_BRACKET key = ID RIGHT_SQUARE_BRACKET
+  //   { ListAccessRHS(mapName, key) }
+  | list = right_side LEFT_SQUARE_BRACKET idx = right_side RIGHT_SQUARE_BRACKET
+    { ListAccessRHS(list, idx) }
   | func_call = func_call
     { FuncCallRHS(func_call)}
   | literal = literals
@@ -226,6 +234,10 @@ right_side:
     { RpcCallRHS rpc_call }
   // | rhs = right_side DOT key = ID
   //   { FieldAccessRHS(rhs, key) }
+  | APPEND LEFT_PAREN list = right_side COMMA item = right_side RIGHT_PAREN
+    { Append(list, item) }
+  | LEN LEFT_PAREN list = right_side RIGHT_PAREN
+    { Len(list) }
 
 statement:
   | cond_stmts = cond_stmts

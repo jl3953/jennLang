@@ -26,6 +26,7 @@ module DA = BatDynArray
 type expr =
   | EVar of string
   | EFind of string * expr
+  | EIdx of expr * expr
   | EInt of int
   | EBool of bool
   | ENot of expr
@@ -35,6 +36,9 @@ type expr =
   | EMap of (string * expr) list
   | EList of expr list
   | EString of string
+  | EContains of expr * expr
+  | EAppend of expr * expr
+  | ELen of expr
 [@@deriving ord]
 
 type lhs =
@@ -175,6 +179,30 @@ let load (var : string) (env : record_env) : value =
     v
   end
 
+let printmaps (prefix : string) (m : (value, value) Hashtbl.t) =
+  Hashtbl.iter (fun k v -> 
+    begin match k with
+    | VInt i -> print_string (prefix ^ "key " ^ string_of_int i ^ "->")
+    | VString s -> print_string (prefix ^ "key " ^ s ^ "->")
+    | VBool b -> print_string (prefix ^ "key " ^ string_of_bool b ^ "->")
+    | VNode n -> print_string (prefix ^ "key " ^ string_of_int n ^ "->")
+    | VOption _ -> print_endline (prefix ^ "key VOption" ^ "->")
+    | VFuture _ -> print_endline (prefix ^ "key VFuture" ^ "->")
+    | VMap _ -> print_endline (prefix ^ "key VMap" ^ "->")
+    | VList _ -> print_endline (prefix ^ "key VList" ^ "->")
+    end;
+    begin match v with
+    | VInt i -> print_endline ("value " ^ string_of_int i)
+    | VString s -> print_endline ("value " ^ s)
+    | VBool b -> print_endline ("value " ^ string_of_bool b)
+    | VNode n -> print_endline ("value " ^ string_of_int n)
+    | VOption _ -> print_endline "value VOption"
+    | VFuture _ -> print_endline "value VFuture"
+    | VMap _ -> print_endline "value VMap"
+    | VList _ -> print_endline "value VList"
+    end
+  ) m
+
 (* Evaluate an expression in the context of an environment. *)
 let rec eval (env : record_env) (expr : expr) : value =
   match expr with
@@ -186,6 +214,47 @@ let rec eval (env : record_env) (expr : expr) : value =
       | VMap map -> Hashtbl.find map (eval env k)
       | _ -> failwith "EFind eval fail"
     end
+  | EIdx (collection, key) ->
+    begin match eval env collection with 
+    | VList list -> print_endline ("EIdx on list " ^ string_of_int (List.length list));
+      begin match eval env key with 
+      | VInt idx -> print_endline ("List.nth " ^ string_of_int idx); List.nth list idx
+      | VBool _ -> failwith "VBool idx"
+      | VString s -> failwith ("VString idx " ^ s)
+      | VFuture _ -> failwith "VFuture idx"
+      | VNode _ -> failwith "VNode idx"
+      | VOption _ -> failwith "VOption idx"
+      | VMap _ -> failwith "VMap idx"
+      | VList _ -> failwith "VList idx"
+      end
+    | VMap map -> print_endline ("EIdx on map " ^ string_of_int (Hashtbl.length map) ^ " keys");
+      printmaps "EIdx " map;
+        begin match eval env key with
+        | VInt i -> print_endline ("EIdxkey on int " ^ string_of_int i)
+        | VString s -> print_endline ("EIdxkey on string " ^ s)
+        | VBool b -> print_endline ("EIdxkey on bool " ^ string_of_bool b)
+        | VNode n -> print_endline ("EIdxkey on node " ^ string_of_int n)
+        | VOption _ -> print_endline "EIdxkey on option"
+        | VFuture _ -> print_endline "EIdxkey on future"
+        | VMap m -> print_endline "EIdxkey on map"; printmaps "EIdxkey " m
+        | VList _ -> print_endline "EIdxkey on list"
+       end;
+      Hashtbl.find map (eval env key)
+    | VString _ -> failwith "EIdx on string"
+    | VBool _ -> failwith "EIdx on bool"
+    | VNode _ -> failwith "EIdx on node"
+    | VOption _ -> failwith "EIdx on option"
+    | VFuture _ -> failwith "EIdx on future"
+    | VInt _ -> failwith "EIdx on int"
+    end
+    (* begin match eval env collection with
+      | VList list -> print_endline "EIdx Vlist";
+        begin match eval env key with 
+        | VInt idx -> print_endline "VInt"; List.nth list idx
+        | _ -> failwith "what the hell"
+        end
+      | _ -> failwith "EIdx eval fail"
+    end *)
   | ENot e -> 
     begin match eval env e with
       | VBool b -> VBool (not b)
@@ -215,7 +284,7 @@ let rec eval (env : record_env) (expr : expr) : value =
       | [] -> Hashtbl.create 91
       | (k, v) :: rest ->
         let tbl = makemap rest in
-        Hashtbl.add (makemap rest) (VString k) (eval env v); 
+        Hashtbl.add tbl (VString k) (eval env v); 
         tbl
       end in 
       VMap (makemap kvpairs)
@@ -227,6 +296,23 @@ let rec eval (env : record_env) (expr : expr) : value =
       end in
       VList (makelist exprs)
   | EString s -> VString s
+  | EContains (e1, e2) ->
+    begin match eval env e1, eval env e2 with
+      | VMap map, key -> VBool (Hashtbl.mem map key)
+      | VList l, value -> VBool (List.mem value l)
+      | _ -> failwith "EContains only operates on collections"
+    end
+  | EAppend (e1, e2) ->
+    begin match eval env e1, eval env e2 with
+      | VList l, value -> VList (l @ [value])
+      | _ -> failwith "EAppend only operates on collections"
+    end
+  | ELen (e) ->
+    begin match eval env e with
+      | VMap map -> VInt (Hashtbl.length map)
+      | VList l -> VInt (List.length l)
+      | _ -> failwith "ELen only operates on collections"
+    end
 
 let rec eval_lhs (env : record_env) (lhs : lhs) : lvalue =
   match lhs with
@@ -234,7 +320,7 @@ let rec eval_lhs (env : record_env) (lhs : lhs) : lvalue =
   | LAccess (lhs, exp) ->
     begin match eval_lhs env lhs with
       | LVVar var ->
-        print_endline ("Accessing " ^ var);
+        (* print_endline ("Accessing " ^ var); *)
         begin match load var env with
           | VMap map -> LVAccess (eval env exp, map)
           | _ -> failwith "LVVar eval_lhs fail"
@@ -281,7 +367,7 @@ let copy (lhs : lhs) (vl : value) (env : record_env) : unit =
   | _ -> failwith "copying only to local_copy"
 
 let function_info name program = 
-  print_endline ("rpc name: " ^ name); 
+  (* print_endline ("rpc name: " ^ name);  *)
   Env.find program.rpc name
 
 (* Execute record until pause/return.  Invariant: record does *not* belong to
@@ -293,7 +379,7 @@ let exec (state : state) (program : program) (record : record) =
   let rec loop () =
     match CFG.label program.cfg record.pc with
     | Instr (instr, next) -> 
-      print_endline "Instr";
+      (* print_endline "Instr"; *)
       record.pc <- next;
       begin match instr with
         | Async (lhs, node, func, actuals) -> 
@@ -371,7 +457,7 @@ let exec (state : state) (program : program) (record : record) =
               end
           end
         | Assign (lhs, rhs) -> 
-          print_endline ("\tAssign executing on node " ^ string_of_int record.node);
+          (*print_endline ("\tAssign executing on node " ^ string_of_int record.node); 
           begin match lhs with
           | LVar v -> print_endline ("LVar " ^ v)
           | LAccess (map, key)  ->
@@ -389,13 +475,35 @@ let exec (state : state) (program : program) (record : record) =
           begin match (eval env rhs) with
           | VInt i -> print_endline ("\t\tVInt " ^ string_of_int i)
           | VBool b -> print_endline ("\t\tVBool " ^ string_of_bool b)
-          | VMap _ -> print_endline "\t\tVMap"
+          | VMap m -> print_endline "\t\tVMap"; print_endline "jenndebug";
+          Hashtbl.iter (fun k v -> 
+            begin match k with
+            | VInt i -> print_endline ("\t\t\t" ^ string_of_int i)
+            | VBool b -> print_endline ("\t\t\t" ^ string_of_bool b)
+            | VString s -> print_endline ("\t\t\t" ^ s)
+            | VFuture _ -> print_endline "\t\t\tVFuture"
+            | VNode n -> print_endline ("\t\t\t" ^ string_of_int n)
+            | VOption _ -> print_endline "\t\t\tVOption"
+            | VList _ -> print_endline "\t\t\tVList"
+            | VMap _ -> print_endline "\t\t\tVMap"
+            end;
+            begin match v with
+            | VInt i -> print_endline ("\t\t\t" ^ string_of_int i)
+            | VBool b -> print_endline ("\t\t\t" ^ string_of_bool b)
+            | VString s -> print_endline ("\t\t\t" ^ s)
+            | VFuture _ -> print_endline "\t\t\tVFuture"
+            | VNode n -> print_endline ("\t\t\t" ^ string_of_int n)
+            | VOption _ -> print_endline "\t\t\tVOption"
+            | VList _ -> print_endline "\t\t\tVList"
+            | VMap _ -> print_endline "\t\t\tVMap"
+            end
+          ) m
           | VList _ -> print_endline "\t\tVList"
           | VOption _ -> print_endline "\t\tVOption"
           | VFuture _ -> print_endline "\t\tVFuture"
           | VString s -> print_endline ("\t\tVString " ^ s)
           | VNode n -> print_endline ("\t\tVNode " ^ string_of_int n)
-          end;
+          end;*)
           store lhs (eval env rhs) env;
         | Copy (lhs, rhs) -> copy lhs (eval env rhs) env;
       end;
@@ -411,7 +519,7 @@ let exec (state : state) (program : program) (record : record) =
       end;
       loop ()
     | Await (lhs, expr, next) -> 
-      print_endline "Await"; 
+      (* print_endline "Await"; 
       begin match expr with 
       | EVar v -> print_endline ("EVar " ^ v)
       | EInt i -> print_endline ("EInt " ^ string_of_int i)
@@ -424,19 +532,21 @@ let exec (state : state) (program : program) (record : record) =
       | EOr _ -> print_endline "EOr"
       | EEqualsEquals _ -> print_endline "EEqualsEquals"
       | EList _ -> print_endline "EList"
+      | EContains _ -> print_endline "EContains"
+      | EAppend _ -> print_endline "EAppend"
       end;
-      print_endline ("On node " ^ string_of_int record.node);
+      print_endline ("On node " ^ string_of_int record.node);*)
       begin match eval env expr with
         | VFuture fut -> 
-          print_endline "\tVFuture";
+          (* print_endline "\tVFuture"; *)
           begin match !fut with
             | Some value -> 
-              print_endline "\t\tSome";
+              (* print_endline "\t\tSome"; *)
               record.pc <- next;
               store lhs value env;
               loop ()
             | None -> 
-              print_endline "\t\tNone";
+              (* print_endline "\t\tNone"; *)
               (* Still waiting.  TODO: should keep blocked records in a
                  different data structure to avoid scheduling records that
                  can't do any work. *)
@@ -445,17 +555,17 @@ let exec (state : state) (program : program) (record : record) =
         | VBool b -> 
           begin match b with
           | true -> 
-            print_endline "\tVBool true";
+            (* print_endline "\tVBool true"; *)
             record.pc <- next;
             loop ()
           | false -> 
-            print_endline "\tVBool false";
+            (* print_endline "\tVBool false"; *)
             state.records <- record::state.records
           end
         | _ -> failwith "Type error!"
       end
     | Return expr -> 
-      print_endline "Return";
+      (* print_endline "Return"; *)
       record.continuation (eval env expr)
     | Pause next -> 
       (* print_endline "Pause"; *)
@@ -467,7 +577,7 @@ let exec (state : state) (program : program) (record : record) =
         (* First remove the pair being processed from the map. *)
         if (Hashtbl.length map) == 0 then 
           begin
-          print_endline "jenndebug made it here";
+          (* print_endline "jenndebug made it here"; *)
           record.pc <- next;
           loop()
           end
@@ -502,10 +612,10 @@ let exec (state : state) (program : program) (record : record) =
 
 let schedule_record (state : state) (program : program) (unique_id: int) : unit =
   print_int (List.length state.records);
-  print_endline " scheduling records left";
+  (* print_endline " scheduling records left"; *)
   if unique_id > 0 then
     begin
-    print_endline ("unique_id " ^ string_of_int unique_id);
+    (* print_endline ("unique_id " ^ string_of_int unique_id); *)
     let rec pick before after =
       match after with
       | [] -> print_endline "Halt"; raise Halt
@@ -520,7 +630,7 @@ let schedule_record (state : state) (program : program) (unique_id: int) : unit 
   end
   else
     begin
-    print_endline "no unique_id";
+    (* print_endline "no unique_id"; *)
     let rec pick n before after =
       match after with
       | [] -> print_endline "Halt"; raise Halt
@@ -543,8 +653,8 @@ let schedule_record (state : state) (program : program) (unique_id: int) : unit 
       | Cond (_, _, _) -> 0
       | ForLoopIn (_, _, _, _) -> 0
     in
-    print_endline ("chosen idx " ^ string_of_int rando);
-    print_endline "";
+    (* print_endline ("chosen idx " ^ string_of_int rando);
+    print_endline "";*)
     pick rando [] state.records
     (* pick 0 [] state.records *)
   end
@@ -558,7 +668,7 @@ let schedule_client (state : state) (program : program) (func_name : string) (ac
     | (c::cs) ->
       if n == 0 then begin
         let op =
-          print_endline ("func_name: " ^ func_name);
+          (* print_endline ("func_name: " ^ func_name); *)
           Env.find program.client_ops func_name
           (* List.nth program.client_ops (Random.int (List.length program.client_ops)) *)
         in

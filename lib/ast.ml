@@ -17,17 +17,21 @@ type boolean =
 | Or of rhs * rhs
 | EqualsEquals of rhs * rhs
 | NotEquals of rhs * rhs
+| Contains of rhs * rhs
 
 and rhs = 
   | VarRHS of string
   | MapAccessRHS of string * string
+  | ListAccessRHS of rhs * rhs
   | FuncCallRHS of func_call
   | LiteralRHS of literal 
   | FieldAccessRHS of rhs * string
   | BoolRHS of boolean
   | CollectionRHS of collection_literal
   | RpcCallRHS of rpc_call
-
+  | Append of rhs * rhs 
+  | Len of rhs
+  
 and collection_literal = 
   | MapLit of (string * rhs) list
   | ListLit of rhs list

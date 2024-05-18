@@ -40,6 +40,7 @@ let rec convert_rhs (rhs : rhs) : Simulator.expr =
   match rhs with
   | VarRHS var -> EVar(var)
   | MapAccessRHS(map, key) -> EFind(map, EVar(key))
+  | ListAccessRHS(list, idx) -> EIdx(convert_rhs list, convert_rhs idx)
   | FuncCallRHS func_call ->
     begin match func_call with
     | FuncCall(func_name, _) -> failwith ("Didn't implement FuncCallRHS yet func: " ^ func_name)
@@ -59,13 +60,16 @@ let rec convert_rhs (rhs : rhs) : Simulator.expr =
     | And (b1, b2) -> EAnd(convert_rhs b1, convert_rhs b2)
     | EqualsEquals (rhs1, rhs2) -> EEqualsEquals(convert_rhs rhs1, convert_rhs rhs2)
     | NotEquals (b1, b2) -> ENot(EEqualsEquals(convert_rhs b1, convert_rhs b2))
+    | Contains (rhs1, rhs2) -> EContains(convert_rhs rhs1, convert_rhs rhs2)
     end 
   | CollectionRHS collection_lit ->
     begin match collection_lit with
-    | MapLit kvpairs -> EMap (List.map (fun (k, v) -> (k, convert_rhs v)) kvpairs);
+    | MapLit kvpairs -> EMap (List.map (fun (k, v) -> print_endline ("jenndebug k " ^ k); (k, convert_rhs v)) kvpairs);
     | ListLit items -> EList (List.map (fun (v) -> convert_rhs v) items)
     end
   | RpcCallRHS _ -> failwith "Didn't implement RpcCallRHS yet"
+  | Append (rhs1, rhs2) -> EAppend(convert_rhs rhs1, convert_rhs rhs2)
+  | Len (rhs) -> ELen(convert_rhs rhs)
 
 let rec generate_cfg_from_stmts (stmts : statement list) (cfg : CFG.t) (last_vert : CFG.vertex) : CFG.vertex =
   match stmts with
@@ -267,33 +271,29 @@ let init_topology (topology : string) (global_state : state) (prog : program) : 
   | "FULL" -> raise (Failure "Not implemented FULL topology")
   | _ -> raise (Failure "Invalid topology")
 
+
+let rec to_string (prefix : string) (value : value) (suffix : string) =
+  begin match value with 
+  | VInt i -> print_string (prefix ^ "VInt " ^ string_of_int i ^ suffix)
+  | VBool b -> print_string (prefix ^ "VBool " ^ string_of_bool b ^ suffix)
+  | VString s -> print_string (prefix ^ "VString " ^ s ^ suffix)
+  | VNode n -> print_string(prefix ^ "VNode " ^ string_of_int n ^ suffix)
+  | VFuture _ -> print_string (prefix ^ "VFuture" ^ suffix)
+  | VMap m -> print_endline (prefix ^ "VMap::");
+    Hashtbl.iter (fun k v -> to_string (prefix ^ "\t mapkey ") k "->"; to_string "" v "\n"
+    ) m;
+    print_string suffix
+  | VOption _ -> print_string (prefix ^ "VOption" ^ suffix)
+  | VList l -> print_endline (prefix ^ "List::"); 
+    List.iter (fun v -> to_string (prefix ^ "\t") v "\n") l;
+    print_string suffix
+  end
+
 let print_single_node (node : (value Env.t)) = 
-  Env.iter (fun key value ->
-    match value with 
-    | VInt i -> print_endline (key ^ ": " ^ (string_of_int i))
-    | VBool b -> print_endline (key ^ ": " ^ (string_of_bool b))
-    | VString s -> print_endline (key ^ ": " ^ s)
-    | VNode n -> print_endline (key ^ ": " ^ (string_of_int n))
-    | VFuture _ -> print_endline (key ^ ": VFuture")
-    | VMap m -> 
-      print_endline (key ^ ": VMap iterations");
-      Hashtbl.iter (fun k_str v -> 
-        let k = match k_str with
-        | VString s -> s
-        | _ -> failwith "Key is not a string" in
-        match v with
-        | VInt i -> print_endline ("\t" ^ k ^ ": " ^ (string_of_int i))
-        | VBool b -> print_endline ("\t" ^ k ^ ": " ^ (string_of_bool b)) 
-        | VString s -> print_endline ("\t" ^ k ^ ": " ^ s)
-        | VNode n -> print_endline ("\t" ^ k ^ ": " ^ (string_of_int n))
-        | VFuture _ -> print_endline ("\t" ^ k ^ ": VFuture")
-        | VMap _ -> print_endline ("\t" ^ k ^ ": VMap")
-        | VOption _ -> print_endline ("\t" ^ k ^ ": VOptions")
-        | VList _ -> print_endline ("\t" ^ k ^ ": VList")
-      ) m;
-    | VOption _ -> print_endline (key ^ ": VOptions")
-    | VList _ -> print_endline (key ^ ": VList")
-  ) node
+  Env.iter (fun key value -> 
+    print_string ("key " ^ key ^ "->"); 
+    to_string "" value "\n"
+    ) node
 
 let print_global_nodes (nodes : (value Env.t) array) = 
   Array.iter (fun node ->
@@ -309,20 +309,22 @@ let interp (f : string) : unit =
     let ast = parse_file f in 
     process_program ast in 
   init_topology topology global_state prog;
+  print_global_nodes global_state.nodes;
   schedule_client global_state prog "write" [VNode 0; VString "birthday"; VInt 812] 0;
   sync_exec global_state prog;
+  print_global_nodes global_state.nodes;
   schedule_client global_state prog "read" [VNode 0; VString "birthday"] 0;
   sync_exec global_state prog; 
-  schedule_client global_state prog "triggerFailover" [VNode 0; VNode 1; VNode 3] 0;
+  (* schedule_client global_state prog "triggerFailover" [VNode 0; VNode 1; VNode 3] 0;
   sync_exec global_state prog;
   schedule_client global_state prog "triggerFailover" [VNode 2; VNode 1; VNode 3] 0;
   sync_exec global_state prog;
   schedule_client global_state prog "triggerFailover" [VNode 3; VNode 1; VNode 3] 0;
-  sync_exec global_state prog;
-  schedule_client global_state prog "write" [VNode 0; VString "university"; VString "Princeton"] 0;
-  sync_exec global_state prog;
-  schedule_client global_state prog "read" [VNode 0; VString "university"] 0;
-  sync_exec global_state prog;
+  sync_exec global_state prog; *)
+  (* schedule_client global_state prog "write" [VNode 0; VString "university"; VString "Princeton"] 0; *)
+  (* sync_exec global_state prog; *)
+  (* schedule_client global_state prog "read" [VNode 0; VString "university"] 0;
+  sync_exec global_state prog; *)
   
   let oc = open_out "output.csv" in
   Printf.fprintf oc "ClientID,Kind,Action,Payload,Value\n";
