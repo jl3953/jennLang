@@ -45,11 +45,15 @@ let rec convert_rhs (rhs : rhs) : Simulator.expr =
     begin match func_call with
     | FuncCall(func_name, _) -> failwith ("Didn't implement FuncCallRHS yet func: " ^ func_name)
     end
-  | LiteralRHS literal -> 
-    begin match literal with
-    | Options _ -> failwith "Didn't implement Options yet"
-    | String s -> EString(s)
-    | Int i -> EInt(i)
+  | StringRHS s_rhs -> 
+    begin match s_rhs with 
+    | String s -> EString s 
+    end
+  | IntRHS i ->
+    begin match i with
+    | Int i -> EInt i
+    | PlusInt (rhs1, rhs2) -> EPlusInt(convert_rhs rhs1, convert_rhs rhs2)
+    | MinusInt (rhs1, rhs2) -> EMinusInt(convert_rhs rhs1, convert_rhs rhs2)
     end
   | FieldAccessRHS _ -> failwith "Didn't implement FieldAccessRHS yet"
   | BoolRHS boolean ->
@@ -309,12 +313,11 @@ let interp (f : string) : unit =
     let ast = parse_file f in 
     process_program ast in 
   init_topology topology global_state prog;
-  print_global_nodes global_state.nodes;
   schedule_client global_state prog "write" [VNode 0; VString "birthday"; VInt 812] 0;
   sync_exec global_state prog;
-  print_global_nodes global_state.nodes;
   schedule_client global_state prog "read" [VNode 0; VString "birthday"] 0;
   sync_exec global_state prog; 
+  print_global_nodes global_state.nodes;
   (* schedule_client global_state prog "triggerFailover" [VNode 0; VNode 1; VNode 3] 0;
   sync_exec global_state prog;
   schedule_client global_state prog "triggerFailover" [VNode 2; VNode 1; VNode 3] 0;
@@ -351,6 +354,6 @@ let interp (f : string) : unit =
     print_global_nodes global_state.nodes;
 ;;
   
-interp "/Users/jenniferlam/jennLang/bin/CRAQ.jenn"
+interp "/home/jennifer/jennLang/bin/CRAQ.jenn"
 let () = print_endline "Program recognized as valid!"
 let () = print_endline "Program ran successfully!"

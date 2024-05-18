@@ -28,9 +28,10 @@
 %token LEFT_SQUARE_BRACKET RIGHT_SQUARE_BRACKET
 %token LEN
 %token MAP
+%token MINUS
 %token NOT_EQUALS
-%token OPTIONS
 %token OR
+%token PLUS
 %token RETURN
 %token RPC_ASYNC_CALL
 %token RPC_CALL
@@ -128,12 +129,6 @@ type_def:
   | MAP LEFT_ANGLE_BRACKET key = type_def COMMA value = type_def RIGHT_ANGLE_BRACKET
     { MapType(key, value) }
 
-options:
-  | id = ID
-    { Option(id) :: [] }
-  | id = ID COMMA opts = options
-    { Option(id) :: opts }
-
 kv_pairs:
   | key = ID COLON value = right_side
     { (key, value) :: []}
@@ -156,15 +151,19 @@ collection_literal:
   | LEFT_SQUARE_BRACKET items = items RIGHT_SQUARE_BRACKET
     { ListLit(items) }
   
-literals:
-  | OPTIONS LEFT_PAREN opts = options RIGHT_PAREN
-    { Options(opts) }
-  | QUOTE s = ID QUOTE
-    { String(s) }
+string:
   | QUOTE QUOTE
     { String("") }
-  | i = INT
-    { Int(i) }
+  | QUOTE s = ID QUOTE
+    { String(s) }
+
+int:
+| i = INT
+  { Int(i) }
+| i1 = right_side PLUS i2 = right_side
+  { PlusInt(i1, i2)}
+| i1 = right_side MINUS i2 = right_side
+  { MinusInt(i1, i2)}
 
 var_init:
   | typ = type_def id = ID EQUALS right_side = right_side
@@ -224,8 +223,10 @@ right_side:
     { ListAccessRHS(list, idx) }
   | func_call = func_call
     { FuncCallRHS(func_call)}
-  | literal = literals
-    { LiteralRHS(literal) }
+  | s = string
+    { StringRHS s}
+  | i = int
+    { IntRHS i }
   | b = boolean
     { BoolRHS b }
   | c = collection_literal

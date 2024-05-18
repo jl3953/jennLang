@@ -28,6 +28,8 @@ type expr =
   | EFind of string * expr
   | EIdx of expr * expr
   | EInt of int
+  | EPlusInt of expr * expr
+  | EMinusInt of expr * expr
   | EBool of bool
   | ENot of expr
   | EAnd of expr * expr
@@ -207,6 +209,16 @@ let printmaps (prefix : string) (m : (value, value) Hashtbl.t) =
 let rec eval (env : record_env) (expr : expr) : value =
   match expr with
   | EInt i -> VInt i
+  | EPlusInt (e1, e2) ->
+    begin match eval env e1, eval env e2 with
+      | VInt i1, VInt i2 -> VInt (i1 + i2)
+      | _ -> failwith "EPlusInt eval fail"
+    end
+  | EMinusInt (e1, e2) ->
+    begin match eval env e1, eval env e2 with
+      | VInt i1, VInt i2 -> VInt (i1 - i2)
+      | _ -> failwith "EMinusInt eval fail"
+    end
   | EBool b -> VBool b
   | EVar v -> load v env
   | EFind (m, k) ->

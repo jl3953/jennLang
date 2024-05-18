@@ -70,6 +70,8 @@ and token = parse
   | "!=" {NOT_EQUALS}
   | "&&" {AND}
   | "||" {OR}
+  | "+" {PLUS}
+  | "-" {MINUS}
   | "append" { APPEND }
   | "await" { AWAIT }
   | "true" { TRUE true }
@@ -83,7 +85,6 @@ and token = parse
   | "in" { IN }
   | "len" { LEN }
   | "map" { MAP }
-  | "Options" { OPTIONS }
   | "return" { RETURN }
   | "rpc_async_call" { RPC_ASYNC_CALL}
   | "rpc_call" { RPC_CALL }

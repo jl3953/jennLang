@@ -13,14 +13,18 @@ Node {
     int self = 0;
 
     func Read(key) -> Value {
+        committed = "committed";
+        value = "value";
+        latest_idx = len(database[key]) - 1;
+        latest_record = database[key][latest_idx];
         if ((role == "Head") || (role == "Mid")) {
-            if (!is_committed[key]) {
+            if (!latest_record[committed]){
                 return rpc_call(tail, Read(key));
             } else {
-                return db[key];
+                return latest_record[value];
             }
         } else {
-            return db[key];
+            return latest_record[value];
         }
     }
 
@@ -40,13 +44,6 @@ Node {
             rpc_async_call(successor, Write(key, val));
             await record[committed] == true;
             
-            /*await record[committed];
-            await database[key][idx][is_committed] == true;*/
-
-            //db[key] = val;
-            //is_committed[key] = false;
-            //rpc_async_call(successor, Write(key, val));
-            //await is_committed[key] == true;
         } else if (role == "Mid") {
             if (contains(database, key) == false) {
                 database[key] = [];
@@ -63,11 +60,6 @@ Node {
             rpc_async_call(successor, Write(key, val));
             await record[committed] == true;
 
-            //db[key] = val;
-            //is_committed[key] = false;
-            //rpc_async_call(successor, Write(key, val));
-            //await is_committed[key] == true;
-
             rpc_async_call(predecessor, AckWrite(key, idx));
         } else {
             if (contains(database, key) == false) {
@@ -79,9 +71,6 @@ Node {
                 value: val, 
                 committed: true
             });
-            // role == "Tail"
-            //db[key] = val;
-            //is_committed[key] = true;
             rpc_async_call(predecessor, AckWrite(key, idx));
         }
     }
@@ -89,7 +78,7 @@ Node {
 
     func AckWrite(key, idx) -> none {
         // check version
-        is_committed[key] = true;
+        //is_committed[key] = true;
         record = database[key][idx];
         committed = "committed";
         record[committed] = true;

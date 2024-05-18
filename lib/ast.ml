@@ -24,7 +24,8 @@ and rhs =
   | MapAccessRHS of string * string
   | ListAccessRHS of rhs * rhs
   | FuncCallRHS of func_call
-  | LiteralRHS of literal 
+  | StringRHS of str
+  | IntRHS of integer
   | FieldAccessRHS of rhs * string
   | BoolRHS of boolean
   | CollectionRHS of collection_literal
@@ -38,10 +39,12 @@ and collection_literal =
 
 and param = Param of rhs 
 
-and literal = 
-  | Options of option list
-  | String of string
+and str = String of string
+
+and integer = 
   | Int of int
+  | PlusInt of rhs * rhs
+  | MinusInt of rhs * rhs
 
 and func_call = FuncCall of string * param list
 
