@@ -27,7 +27,8 @@ let global_state =
       { nodes = Array.init (num_servers + num_clients) (fun _ -> Env.create 91) 
       ; records = []
       ; history = DA.create () 
-      ; free_clients = List.init num_clients (fun i -> num_servers + i) }
+      ; free_clients = List.init num_clients (fun i -> num_servers + i)
+      ; committed_write = false}
 
 let convert_lhs(lhs : Ast.lhs) : Simulator.lhs =
   match lhs with 

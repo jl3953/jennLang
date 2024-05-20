@@ -117,6 +117,7 @@ end = struct
 end
 
 type op_type = 
+  | AckWrite
   | Read
   | Write
   | ClientReq
@@ -159,6 +160,7 @@ type state =
   ; mutable records : record list
   ; history : operation DA.t
   ; mutable free_clients : int list (* client ids should be valid indexes into nodes *)
+  ; mutable committed_write : bool
   }
 
 (* Execution environment of an activation record: local variables +
@@ -182,7 +184,7 @@ type program =
 let assign_tags (func_name : string) : op_type =
   match func_name with
   | "Read" -> Read
-  | "AckWrite"
+  | "AckWrite" -> AckWrite
   | "Write" -> Write 
   | _ -> Other 
 
@@ -533,7 +535,13 @@ let exec (state : state) (program : program) (record : record) =
   in
   loop ()
 
-let should_choose (r : record) (rejections : int) (threshold : int) (_ : program): bool =
+
+let check_write_committed_yet (r : record) : bool =
+  match r.tags.typ with
+  | AckWrite -> true
+  | _ -> false
+
+let choose_read_friendly (r : record) (rejections : int) (threshold : int) (_ : program): bool =
   if threshold = 0 then true else
     if rejections = threshold then true else
       (*match (CFG.label program.cfg r.pc) with
@@ -542,10 +550,28 @@ let should_choose (r : record) (rejections : int) (threshold : int) (_ : program
     match r.tags.typ with
     | Write -> 
       print_endline ("write, rejections " ^ string_of_int rejections ^ " threshold " ^ string_of_int threshold);
-      if (Random.float 1.0) < 0.7 then false else true
+      if (Random.float 1.0) < 0.9 then false else true
     | Read -> 
       print_endline ("read, rejections " ^ string_of_int rejections ^ " threshold " ^ string_of_int threshold);
-      if (Random.float 1.0) < 0.3 then false else true
+      if (Random.float 1.0) < 0.1 then false else true
+    | _ -> 
+      print_endline ("other, rejections " ^ string_of_int rejections ^ " threshold " ^ string_of_int threshold);
+      if (Random.float 1.0) < 0.1 then false else true
+
+(* Check if a record should be executed. *)
+let choose_write_friendly (r : record) (rejections : int) (threshold : int) (_ : program): bool =
+  if threshold = 0 then true else
+    if rejections = threshold then true else
+      (*match (CFG.label program.cfg r.pc) with
+      | Await (_, _, _) -> false
+      | _ ->  *)
+    match r.tags.typ with
+    | Write -> 
+      print_endline ("write, rejections " ^ string_of_int rejections ^ " threshold " ^ string_of_int threshold);
+      if (Random.float 1.0) < 0.1 then false else true
+    | Read -> 
+      print_endline ("read, rejections " ^ string_of_int rejections ^ " threshold " ^ string_of_int threshold);
+      if (Random.float 1.0) < 0.9 then false else true
     | _ -> 
       print_endline ("other, rejections " ^ string_of_int rejections ^ " threshold " ^ string_of_int threshold);
       if (Random.float 1.0) < 0.1 then false else true
@@ -560,11 +586,30 @@ let schedule_record (state : state) (program : program) : unit =
       | [] -> raise Halt
       | (r::rs) -> 
         print_endline ("num records " ^ string_of_int (List.length state.records));
-        if (should_choose r (List.length before) ((List.length state.records)-1) program) then begin
-          state.records <- List.rev_append before rs;
-          exec state program r
-        end else
-          pick (r::before) rs
+        if (check_write_committed_yet r) then 
+          state.committed_write <- true;
+        if state.committed_write then
+          begin
+            print_endline ("committed write ");
+            if choose_read_friendly r (List.length before) ((List.length state.records)-1) program then
+              begin
+                state.records <- List.rev_append before rs;
+                exec state program r
+              end
+            else
+              pick (r::before) rs
+          end
+        else
+          begin
+            print_endline ("committed no write ");
+            if (choose_write_friendly r (List.length before) ((List.length state.records)-1) program) then 
+              begin
+                state.records <- List.rev_append before rs;
+                exec state program r
+              end 
+            else
+              pick (r::before) rs
+            end
     in
     pick [] state.records
   end
