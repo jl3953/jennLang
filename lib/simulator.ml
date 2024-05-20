@@ -542,6 +542,7 @@ let check_write_committed_yet (r : record) : bool =
   | _ -> false
 
 let choose_read_friendly (r : record) (rejections : int) (threshold : int) (_ : program): bool =
+  Random.self_init ();
   if threshold = 0 then true else
     if rejections = threshold then true else
       (*match (CFG.label program.cfg r.pc) with
@@ -550,7 +551,7 @@ let choose_read_friendly (r : record) (rejections : int) (threshold : int) (_ : 
     match r.tags.typ with
     | Write -> 
       print_endline ("write, rejections " ^ string_of_int rejections ^ " threshold " ^ string_of_int threshold);
-      if (Random.float 1.0) < 0.9 then false else true
+      if (Random.float 1.0) < 0.95 then false else true
     | Read -> 
       print_endline ("read, rejections " ^ string_of_int rejections ^ " threshold " ^ string_of_int threshold);
       if (Random.float 1.0) < 0.1 then false else true
@@ -560,6 +561,7 @@ let choose_read_friendly (r : record) (rejections : int) (threshold : int) (_ : 
 
 (* Check if a record should be executed. *)
 let choose_write_friendly (r : record) (rejections : int) (threshold : int) (_ : program): bool =
+  Random.self_init ();
   if threshold = 0 then true else
     if rejections = threshold then true else
       (*match (CFG.label program.cfg r.pc) with
@@ -568,10 +570,10 @@ let choose_write_friendly (r : record) (rejections : int) (threshold : int) (_ :
     match r.tags.typ with
     | Write -> 
       print_endline ("write, rejections " ^ string_of_int rejections ^ " threshold " ^ string_of_int threshold);
-      if (Random.float 1.0) < 0.1 then false else true
+      if (Random.float 1.0) < 0.95 then false else true
     | Read -> 
       print_endline ("read, rejections " ^ string_of_int rejections ^ " threshold " ^ string_of_int threshold);
-      if (Random.float 1.0) < 0.9 then false else true
+      if (Random.float 1.0) < 1.0 then false else true
     | _ -> 
       print_endline ("other, rejections " ^ string_of_int rejections ^ " threshold " ^ string_of_int threshold);
       if (Random.float 1.0) < 0.1 then false else true
