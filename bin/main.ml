@@ -29,14 +29,14 @@ let global_state =
       ; history = DA.create () 
       ; free_clients = List.init num_clients (fun i -> num_servers + i) }
 
-let convert_lhs(lhs : Ast.lhs) : Simulator.lhs =
+let rec convert_lhs(lhs : Ast.lhs) : Simulator.lhs =
   match lhs with 
   | VarLHS (var_name) -> LVar(var_name)
-  | MapAccessLHS (map_name, key) -> LAccess(LVar(map_name), EVar(key))
+  | MapAccessLHS (map_name, key) -> LAccess(convert_lhs map_name, convert_rhs key)
   | FieldAccessLHS (_, _) -> failwith "TODO what on earth is FieldAccessLHS again?"
   | TupleLHS lefts -> LTuple lefts
 
-let rec convert_rhs (rhs : rhs) : Simulator.expr =
+and convert_rhs (rhs : rhs) : Simulator.expr =
   match rhs with
   | VarRHS var -> EVar(var)
   | MapAccessRHS(map, key) -> EFind(map, EVar(key))
@@ -288,8 +288,8 @@ let rec to_string (prefix : string) (value : value) (suffix : string) =
     ) m;
     print_string suffix
   | VOption _ -> print_string (prefix ^ "VOption" ^ suffix)
-  | VList l -> print_endline (prefix ^ "List::"); 
-    List.iter (fun v -> to_string (prefix ^ "\t") v "\n") l;
+  | VList m_list -> print_endline (prefix ^ "List::"); 
+    mutable_iter (fun v -> to_string (prefix ^ "\t") v "\n") m_list;
     print_string suffix
   end
 
@@ -354,6 +354,6 @@ let interp (f : string) : unit =
     print_global_nodes global_state.nodes;
 ;;
   
-interp "/home/jennifer/jennLang/bin/CRAQ.jenn"
+interp "/Users/jenniferlam/jennLang/bin/CRAQ.jenn"
 let () = print_endline "Program recognized as valid!"
 let () = print_endline "Program ran successfully!"

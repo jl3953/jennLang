@@ -54,7 +54,7 @@ and rpc_call =
 
 and lhs = 
   | VarLHS of string
-  | MapAccessLHS of string * string
+  | MapAccessLHS of lhs * rhs
   | FieldAccessLHS of rhs * string
   | TupleLHS of string list
 

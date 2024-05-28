@@ -23,6 +23,56 @@ module DA = BatDynArray
    - In general, I do not understand how "Roles" should be implemented
 *)
 
+
+type 'a mutable_list = 
+{ mutable head : 'a option
+; mutable next : 'a mutable_list option }
+
+let rec length_aux len = function
+    {head = None; next = None} -> len
+  | {head = Some _; next = None} -> len + 1
+  | {head = Some _; next = Some n} -> length_aux (len + 1) n
+  | {head = None; next = Some _ } -> failwith "length_aux head can't be None if next is Some"
+
+let mutable_length l = length_aux 0 l
+
+let mutable_nth m_list n =
+  if n < 0 then invalid_arg "mutable_nth" 
+  else let rec nth_aux l n =
+    match l with
+    | {head = None; next = None} -> failwith "nth"
+    | {head = Some h; next = None} -> if n = 0 then h else failwith "nth"
+    | {head = Some h; next = Some nx} -> if n = 0 then h else nth_aux nx (n-1)
+    | {head = None; next = Some _} -> failwith "mutable_nth head can't be None if next is Some"
+  in nth_aux m_list n
+
+let append m_list value =
+  let rec append_aux l value =
+    match l with
+    | {head = None; next = None} -> l.head <- Some value
+    | {head = Some _; next = None} -> l.next <- Some {head = Some value; next = None}
+    | {head = Some _; next = Some nx} -> append_aux nx value
+    | {head = None; next = Some _} -> failwith "append head can't be None if next is Some"
+  in append_aux m_list value
+
+let rec mutable_mem x = function
+    {head = None; next = None } -> false
+  | {head = Some h; next = None } -> h = x
+  | {head = Some h; next = Some nx} -> h = x || mutable_mem x nx
+  | {head = None; next = Some _} -> failwith "mutable_mem head can't be None if next is Some"
+
+let rec mutable_map f = function
+    {head = None; next = None} -> {head = None; next = None}
+  | {head = Some h; next = None} -> {head = Some (f h); next = None}
+  | {head = Some h; next = Some nx} -> {head = Some (f h); next = Some (mutable_map f nx)}
+  | {head = None; next = Some _} -> failwith "mutable_map head can't be None if next is Some"
+
+let rec mutable_iter f = function
+    {head = None; next = None} -> ()
+  | {head = Some h; next = None} -> f h
+  | {head = Some h; next = Some nx} -> f h; mutable_iter f nx
+  | {head = None; next = Some _} -> failwith "mutable_iter head can't be None if next is Some"
+
 type expr =
   | EVar of string
   | EFind of string * expr
@@ -71,7 +121,7 @@ type value =
   | VInt of int
   | VBool of bool
   | VMap of (value, value) Hashtbl.t
-  | VList of value list
+  | VList of value mutable_list
   | VOption of (value option)
   | VFuture of (value option) ref
   | VNode of int
@@ -228,9 +278,9 @@ let rec eval (env : record_env) (expr : expr) : value =
     end
   | EIdx (collection, key) ->
     begin match eval env collection with 
-    | VList list -> print_endline ("EIdx on list " ^ string_of_int (List.length list));
+    | VList m_list -> print_endline ("EIdx on list " ^ string_of_int (mutable_length m_list));
       begin match eval env key with 
-      | VInt idx -> print_endline ("List.nth " ^ string_of_int idx); List.nth list idx
+      | VInt idx -> print_endline ("List.nth " ^ string_of_int idx); mutable_nth m_list idx
       | VBool _ -> failwith "VBool idx"
       | VString s -> failwith ("VString idx " ^ s)
       | VFuture _ -> failwith "VFuture idx"
@@ -301,28 +351,30 @@ let rec eval (env : record_env) (expr : expr) : value =
       end in 
       VMap (makemap kvpairs)
   | EList exprs ->
-    let rec makelist (exprs : expr list) : value list =
+    let rec makelist (exprs : expr list) : value mutable_list =
       begin match exprs with
-      | [] -> []
-      | e :: rest -> (eval env e) :: (makelist rest)
+      | [] -> { head = None; next = None}
+      | e :: [] -> { head = Some (eval env e); next = None}
+      (* | e :: rest -> (eval env e) :: (makelist rest) *)
+      | e :: rest -> { head = Some (eval env e); next = Some (makelist rest)}
       end in
       VList (makelist exprs)
   | EString s -> VString s
   | EContains (e1, e2) ->
     begin match eval env e1, eval env e2 with
       | VMap map, key -> VBool (Hashtbl.mem map key)
-      | VList l, value -> VBool (List.mem value l)
+      | VList m_list, value -> VBool (mutable_mem value m_list)
       | _ -> failwith "EContains only operates on collections"
     end
   | EAppend (e1, e2) ->
     begin match eval env e1, eval env e2 with
-      | VList l, value -> VList (l @ [value])
+      | VList m_list, value -> VList (append m_list value; m_list)
       | _ -> failwith "EAppend only operates on collections"
     end
   | ELen (e) ->
     begin match eval env e with
       | VMap map -> VInt (Hashtbl.length map)
-      | VList l -> VInt (List.length l)
+      | VList m_list -> VInt (mutable_length m_list)
       | _ -> failwith "ELen only operates on collections"
     end
 
@@ -371,9 +423,9 @@ let copy (lhs : lhs) (vl : value) (env : record_env) : unit =
     | VMap m -> 
       let temp = Hashtbl.copy m in
       Env.replace env.local_env var (VMap temp)
-    | VList l ->
-      let temp = List.map (fun x -> x) l in
-      Env.replace env.local_env var (VList temp)
+    | VList m_list ->
+      let mutable_temp = mutable_map (fun x -> x) m_list in
+      Env.replace env.local_env var (VList mutable_temp)
     | _ -> failwith "no copying non-collections"
     end
   | _ -> failwith "copying only to local_copy"

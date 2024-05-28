@@ -14,7 +14,6 @@
 %token CLIENT_INTERFACE
 %token COLON
 %token COMMA
-// %token DOT
 %token EQUALS
 %token EQUALS_EQUALS
 %token CONTAINS
@@ -181,17 +180,20 @@ l_items:
   | id = ID COMMA rest = l_items
     { id::rest }
 
+collection_access:
+  | name = ID LEFT_SQUARE_BRACKET key = right_side RIGHT_SQUARE_BRACKET
+    { MapAccess(name, key) }
+  | name = collection_access LEFT_SQUARE_BRACKET key = right_side RIGHT_SQUARE_BRACKET
+    { MapAccess(name, key) }
+
 left_side:
   | id = ID
     { VarLHS(id) }
-  | mapName = ID LEFT_SQUARE_BRACKET key = ID RIGHT_SQUARE_BRACKET
-    { MapAccessLHS(mapName, key) }
-  // | rhs = right_side DOT key = ID
-  //   { FieldAccessLHS(rhs, key) } 
+  | access = collection_access
+    { CollectionAccessLHS(access) }
+    // { MapAccessLHS(mapName, key) }
   | l_items = l_items
     { TupleLHS(l_items) }
-  // | map = left_side LEFT_SQUARE_BRACKET key = ID RIGHT_SQUARE_BRACKET
-  //   { MapAccessLHS(map, key) }
 
 
 boolean:
@@ -217,10 +219,9 @@ boolean:
 right_side:
   | id = ID
     { VarRHS(id) }
-  // | mapName = ID LEFT_SQUARE_BRACKET key = ID RIGHT_SQUARE_BRACKET
-  //   { ListAccessRHS(mapName, key) }
-  | list = right_side LEFT_SQUARE_BRACKET idx = right_side RIGHT_SQUARE_BRACKET
-    { ListAccessRHS(list, idx) }
+  | mapAccess = collection_access
+    { CollectionAccessRHS(mapAccess) }
+    // { ListAccessRHS(list, idx) }
   | func_call = func_call
     { FuncCallRHS(func_call)}
   | s = string
@@ -233,8 +234,6 @@ right_side:
     { CollectionRHS c }
   | rpc_call = rpc_call
     { RpcCallRHS rpc_call }
-  // | rhs = right_side DOT key = ID
-  //   { FieldAccessRHS(rhs, key) }
   | APPEND LEFT_PAREN list = right_side COMMA item = right_side RIGHT_PAREN
     { Append(list, item) }
   | LEN LEFT_PAREN list = right_side RIGHT_PAREN
@@ -268,11 +267,6 @@ role_def:
     func_defs = func_defs
     RIGHT_CURLY_BRACE
     { RoleDef(id, [], var_inits, func_defs) }
-  // | id = ID LEFT_PAREN params = params RIGHT_PAREN LEFT_CURLY_BRACE
-  //   var_inits = var_inits
-  //   func_defs = func_defs
-  //   RIGHT_CURLY_BRACE
-  //   { RoleDef(id, params, var_inits, func_defs) }
 
 client_def:
   | CLIENT_INTERFACE LEFT_CURLY_BRACE
