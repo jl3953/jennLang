@@ -36,7 +36,7 @@ git clone https://github.com/jl3953/jennLang
 
 First, generate an execution trace. Second, check if that trace is linearizable.
 
-Generate an execution trace to `output.csv`. 
+Generate an execution trace to `output.csv`. When running, a huge amount of logging may output to your window--that is okay to ignore.
 ```
 eval $(opam env --switch=default) # run once at the start of each session
 dune exec _build/default/bin/main.exe
@@ -46,7 +46,7 @@ Notes:
 - You may modify the output trace file by modifying [this line](https://github.com/jl3953/jennLang/blob/main/bin/main.ml#L327).
 
 
-Check if that execution trace is linearizable using the python SAT solver.
+Check if that execution trace is linearizable using the python SAT solver. If trace is linearizable, the output shows a potential total order. If not, the output states "UNSAT".
 ```
 python3 main.py
 ```
