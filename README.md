@@ -8,7 +8,7 @@ lib/            # compiler front-end (lexer, parser, ast) here + Zak's simulator
 README.md       
 jennLang.opam   # ignore
 output.csv      # main.ml generates trace to this file, to be passed to python script
-'''
+```
 
 ## Getting started
 
