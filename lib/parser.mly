@@ -13,7 +13,7 @@
 %token CLIENT_INTERFACE
 %token COLON
 %token COMMA
-%token DOT
+(*%token DOT*)
 %token EQUALS
 %token EQUALS_EQUALS
 %token FOR
@@ -224,8 +224,8 @@ right_side:
     { CollectionRHS c }
   | rpc_call = rpc_call
     { RpcCallRHS rpc_call }
-  | rhs = right_side DOT key = ID
-    { FieldAccessRHS(rhs, key) }
+  (*| rhs = right_side DOT key = ID
+    { FieldAccessRHS(rhs, key) }*)
 
 statement:
   | cond_stmts = cond_stmts

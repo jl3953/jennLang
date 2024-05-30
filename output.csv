@@ -1,4 +1,4 @@
-ClientID,Kind,Action,Payload,Value
+ClientID,Kind,Action,Node,Payload,Value
 5,Invocation,init,0,Mid,4,3,1,2,0,2,0,TODO implement VMap
 5,Response,init,true,
 6,Invocation,init,1,Mid,0,4,2,3,0,2,1,TODO implement VMap

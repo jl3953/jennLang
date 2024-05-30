@@ -325,7 +325,7 @@ let interp (f : string) : unit =
   sync_exec global_state prog;
   
   let oc = open_out "output.csv" in
-  Printf.fprintf oc "ClientID,Kind,Action,Payload,Value\n";
+  Printf.fprintf oc "ClientID,Kind,Action,Node,Payload,Value\n";
   DA.iter (fun op -> 
     Printf.fprintf oc "%d," op.client_id
     ; begin match op.kind with 
@@ -349,6 +349,6 @@ let interp (f : string) : unit =
     print_global_nodes global_state.nodes;
 ;;
   
-interp "/home/jennifer/jennLang/bin/CRAQ.jenn"
+interp "bin/CRAQ.jenn"
 let () = print_endline "Program recognized as valid!"
 let () = print_endline "Program ran successfully!"
