@@ -12,20 +12,20 @@ output.csv      # main.ml generates trace to this file, to be passed to python s
 
 ## Getting started
 
-Install [OCaml](https://ocaml.org/install).
+Install [OCaml](https://ocaml.org/install) and [Dune](https://dune.build/).
 ```
-bash -c "sh <(curl -fsSL https://raw.githubusercontent.com/ocaml/opam/master/shell/install.sh)"
+bash -c "sh <(curl -fsSL https://raw.githubusercontent.com/ocaml/opam/master/shell/install.sh)" # install OCaml
 opam init 
+opam install ocaml-lsp-server odoc ocamlformat utop # install Dune
 ```
 
-Install [Dune](https://dune.build/).
+Clone this repository.
 ```
-opam install ocaml-lsp-server odoc ocamlformat utop
+git clone https://github.com/jl3953/jennLang
 ```
 
-Clone this repository, and run the simulator.
+## Generating an execution trace
 ```
-git clone https://github.com/jl3953/jennLang # clone
 dune exec \\_build/default/bin/main.exe # run
 ```
 
