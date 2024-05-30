@@ -11,7 +11,7 @@ output.csv      # main.ml generates trace to this file, to be passed to python S
 main.py         # python SAT solver, checks if given trace is linearizable
 ```
 
-## Building and Installing dependencies
+## Installing dependencies
 
 The following instructions were tested on Ubuntu 20.04.
 
@@ -32,7 +32,7 @@ Clone this repository.
 git clone https://github.com/jl3953/jennLang
 ```
 
-## Generating an execution trace
+## Generating and checking an execution trace
 
 First, generate an execution trace. Second, check if that trace is linearizable.
 
@@ -43,7 +43,7 @@ dune exec _build/default/bin/main.exe
 ```
 Notes:
 - You may modify the input specification file by modifying [this line](https://github.com/jl3953/jennLang/blob/main/bin/main.ml#L352).
-- You may modify the output file by modifying [this line](https://github.com/jl3953/jennLang/blob/main/bin/main.ml#L327).
+- You may modify the output trace file by modifying [this line](https://github.com/jl3953/jennLang/blob/main/bin/main.ml#L327).
 
 
 Check if that execution trace is linearizable using the python SAT solver.
@@ -51,4 +51,9 @@ Check if that execution trace is linearizable using the python SAT solver.
 python3 main.py
 ```
 Notes:
-- You may modify the input trace file by modifying
+- You may modify the input trace file by modifying [this line](https://github.com/jl3953/jennLang/blob/main/main.py#L312).
+- This checker skips over any initialization and failover instructions.
+
+
+## Adjusting trace generation parameters
+Coming soon, currently on another branch.
