@@ -12,13 +12,13 @@ output.csv      # main.ml generates trace to this file, to be passed to python s
 
 ## Getting started
 
-Install OCaml (official instructions [here](https://ocaml.org/install)).
+Install [OCaml](https://ocaml.org/install).
 ```
 bash -c "sh <(curl -fsSL https://raw.githubusercontent.com/ocaml/opam/master/shell/install.sh)"
 opam init 
 ```
 
-Install Dune, the build system for OCaml projects.
+Install [Dune](https://dune.build/).
 ```
 opam install ocaml-lsp-server odoc ocamlformat utop
 ```
