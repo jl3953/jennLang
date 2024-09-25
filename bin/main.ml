@@ -5,7 +5,7 @@ open Mylib.Simulator
 (*Parametrize first*)
 (* TOPOLOGIES = ["LINEAR"; "STAR"; "RING"; "FULL"] *)
 let num_servers = 5
-let num_clients = 3
+let num_clients = 20
 let chain_len = 3
 let head_idx = 0
 let tail_idx = chain_len - 1
@@ -310,18 +310,23 @@ let interp (f : string) : unit =
     process_program ast in 
   init_topology topology global_state prog;
   schedule_client global_state prog "write" [VNode 0; VString "birthday"; VInt 812] 0;
-  sync_exec global_state prog;
-  schedule_client global_state prog "read" [VNode 0; VString "birthday"] 0;
-  sync_exec global_state prog; 
-  schedule_client global_state prog "triggerFailover" [VNode 0; VNode 1; VNode 3] 0;
-  sync_exec global_state prog;
-  schedule_client global_state prog "triggerFailover" [VNode 2; VNode 1; VNode 3] 0;
-  sync_exec global_state prog;
-  schedule_client global_state prog "triggerFailover" [VNode 3; VNode 1; VNode 3] 0;
-  sync_exec global_state prog;
   schedule_client global_state prog "write" [VNode 0; VString "university"; VString "Princeton"] 0;
+  schedule_client global_state prog "write" [VNode 0; VString "jenn"; VString "lam"] 0;
+  schedule_client global_state prog "write" [VNode 0; VString "hello"; VString "world"] 0;
+  schedule_client global_state prog "write" [VNode 0; VString "Pikachu"; VString "Electric"] 0;
+  schedule_client global_state prog "write" [VNode 0; VString "Charmander"; VString "Fire"] 0;
+  schedule_client global_state prog "write" [VNode 0; VString "Squirtle"; VString "Water"] 0;
+  schedule_client global_state prog "write" [VNode 0; VString "Bulbasaur"; VString "Grass"] 0;
+  schedule_client global_state prog "write" [VNode 0; VString "Geodude"; VString "Rock"] 0;
+  schedule_client global_state prog "write" [VNode 0; VString "Pokemon"; VString "gottacatchemall"] 0;
   sync_exec global_state prog;
-  schedule_client global_state prog "read" [VNode 0; VString "university"] 0;
+  schedule_client global_state prog "read" [VNode 0; VString "Squirtle"] 0;
+  schedule_client global_state prog "read" [VNode 0; VString "Charmander"] 0;
+  schedule_client global_state prog "read" [VNode 0; VString "Pokemon"] 0;
+  schedule_client global_state prog "read" [VNode 0; VString "birthday"] 0;
+  schedule_client global_state prog "read" [VNode 0; VString "university"] 0;  
+  schedule_client global_state prog "read" [VNode 0; VString "jenn"] 0;
+  schedule_client global_state prog "read" [VNode 0; VString "Pikachu"] 0;
   sync_exec global_state prog;
   
   let oc = open_out "output.csv" in

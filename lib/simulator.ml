@@ -302,17 +302,6 @@ let exec (state : state) (program : program) (record : record) =
           | EString s -> s
           | _ -> failwith "Async type fail" in
           let () = print_endline ("\tAsync " ^ roleName) in 
-          (* let node = 
-            begin match (eval env nodeVar) with
-            | VString s -> s
-            | VBool _ -> failwith "Type error bool"
-            | VInt _ -> failwith "Type error int"
-            | VMap _ -> failwith "Type error map"
-            | VOption _ -> failwith "Type error option"
-            | VFuture _ -> failwith "Type error future"
-            | VNode _ -> failwith "Type error node"
-            end in *)
-          (* print_endline ("\tAsync node " ^ node); *)
           begin match eval env node with
             | VNode node_id ->
               let new_future = ref None in
@@ -531,17 +520,20 @@ let schedule_record (state : state) (program : program) (unique_id: int) : unit 
         end else
           pick (n-1) (r::before) rs
     in
-    (* let rando = Random.int (List.length state.records) in *)
-    let head = List.hd state.records in
-    let vert = head.pc in 
+    let idx = 0 (*Random.init (int_of_float (Unix.time ())); Random.int (List.length state.records)*) in
+    let random_rec = List.nth state.records idx in
+    let vert = random_rec.pc in 
     let rando = 
       match (CFG.label program.cfg vert) with
-      | Instr (_, _) -> 0
-      | Pause _ -> if (List.length state.records) == 1 then 0 else 1
-      | Await (_, _, _) -> if (List.length state.records) == 1 then 0 else 1
-      | Return _ -> 0
-      | Cond (_, _, _) -> 0
-      | ForLoopIn (_, _, _, _) -> 0
+      | Pause _ 
+      | Await (_, _, _) -> 
+        if (List.length state.records) == 1 then 0 else
+          if (Random.float 1.0) < 0.05 then 1 else
+            begin
+              Random.init (int_of_float (Unix.time())); 
+              Random.int (List.length state.records)
+            end
+      | _ -> idx
     in
     print_endline ("chosen idx " ^ string_of_int rando);
     print_endline "";
