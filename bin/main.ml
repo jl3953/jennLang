@@ -10,11 +10,55 @@ let chain_len = 3
 let head_idx = 0
 let tail_idx = chain_len - 1
 let topology = "LINEAR"
+
+let random_key (tbl : (value, value) Hashtbl.t) : string =
+  let keys = Hashtbl.fold (fun k _ acc -> k :: acc) tbl [] in
+  let len = List.length keys in
+  let index = Random.self_init(); Random.int len in
+  match (List.nth keys index) with 
+  | VString s -> s
+  | _ -> failwith "Key is not a string"
+
+  let random_op () : string = 
+    if Random.self_init(); Random.bool() then 
+      "read" 
+    else 
+      "write"
+
+let cars (key : string) : string list =
+  match key with 
+  | "Nissan" -> ["Versa"; "Rogue"; "Altima"; "Maxima"; "Sentra"]
+  | "Toyota" -> ["Corolla"; "Camry"; "Prius"; "Yaris"; "Avalon"]
+  | "Hyundai" -> ["Accent"; "Elantra"; "Sonata"; "Azera"; "Tucson"]
+  | "Kia" -> ["Rio"; "Forte"; "Optima"; "Cadenza"; "Soul"]
+  | "Mazda" -> ["Mazda3"; "Mazda6"; "Mazda2"; "MazdaCX-5"; "MazdaCX-30"]
+  | "Honda" -> ["Civic"; "Accord"; "Pilot"; "HR-V"; "CR-V"]
+  | "Acura" -> ["ILX"; "TLX"; "Integra"; "RDX"; "MDX"]
+  | "Ford" -> ["Fiesta"; "Edge"; "Explorer"; "Mustang"; "Escape"]
+  | "Chevrolet" -> ["Volt"; "Bolt"; "Spark"; "Cruze"; "Malibu"]
+  | "Volkswagen" -> ["Jetta"; "Passat"; "Golf"; "Tiguan"; "Atlas"]
+  | _ -> failwith "Invalid key"
+
+let generate_random_value (key : string) : string = 
+  let car_models = cars key in
+  let index = Random.self_init(); Random.int (List.length car_models) in
+  List.nth car_models index
+
 let data () : (value, value) Hashtbl.t = 
   let tbl = Hashtbl.create 91 in
-  Hashtbl.add tbl (VString "birthday") (VInt 214);
+  (* Hashtbl.add tbl (VString "birthday") (VInt 214);
   Hashtbl.add tbl (VString "epoch") (VInt 1980);
-  Hashtbl.add tbl (VString "name") (VString "Jennifer");
+  Hashtbl.add tbl (VString "name") (VString "Jennifer"); *)
+  Hashtbl.add tbl (VString "Nissan") (VString "Rogue");
+  Hashtbl.add tbl (VString "Toyota") (VString "Corolla");
+  Hashtbl.add tbl (VString "Hyundai") (VString "Tucson");
+  Hashtbl.add tbl (VString "Kia") (VString "Soul");
+  Hashtbl.add tbl (VString "Mazda") (VString "Mazda3");
+  Hashtbl.add tbl (VString "Honda") (VString "Civic");
+  Hashtbl.add tbl (VString "Acura") (VString "Integra");
+  Hashtbl.add tbl (VString "Ford") (VString "Fiesta");
+  Hashtbl.add tbl (VString "Chevrolet") (VString "Volt");
+  Hashtbl.add tbl (VString "Volkswagen") (VString "Jetta");
   tbl
 
 let mod_op (i : int) (m : int): int = 
@@ -309,20 +353,27 @@ let interp (f : string) : unit =
     let ast = parse_file f in 
     process_program ast in 
   init_topology topology global_state prog;
-  schedule_client global_state prog "write" [VNode 0; VString "birthday"; VInt 812] 0;
+
+  (* schedule_client global_state prog "write" [VNode 0; VString "birthday"; VInt 812] 0; *)
+  for _ = 1 to 10 do
+    let key = (random_key (data())) in
+    match random_op() with
+    | "read" -> 
+      schedule_client global_state prog "read" [VNode 0; VString key] 0;
+      sync_exec global_state prog
+    | "write" -> 
+      schedule_client global_state prog "write" [VNode 0; VString key; VString (generate_random_value key)] 0;
+      sync_exec global_state prog
+    | _ -> failwith "Invalid operation"
+  done;
+(* 
+  let key = random_key (data()) in 
+  schedule_client global_state prog "write" [VNode 0; VString key; VString (generate_random_value key)] 0;
   sync_exec global_state prog;
-  schedule_client global_state prog "read" [VNode 0; VString "birthday"] 0;
-  sync_exec global_state prog; 
-  schedule_client global_state prog "triggerFailover" [VNode 0; VNode 1; VNode 3] 0;
-  sync_exec global_state prog;
-  schedule_client global_state prog "triggerFailover" [VNode 2; VNode 1; VNode 3] 0;
-  sync_exec global_state prog;
-  schedule_client global_state prog "triggerFailover" [VNode 3; VNode 1; VNode 3] 0;
-  sync_exec global_state prog;
-  schedule_client global_state prog "write" [VNode 0; VString "university"; VString "Princeton"] 0;
-  sync_exec global_state prog;
-  schedule_client global_state prog "read" [VNode 0; VString "university"] 0;
-  sync_exec global_state prog;
+  schedule_client global_state prog "read" [VNode 0; VString key] 0;
+  sync_exec global_state prog; *)
+
+  (* Print the final state of the nodes *)
   
   let oc = open_out "output.csv" in
   Printf.fprintf oc "ClientID,Kind,Action,Node,Payload,Value\n";
