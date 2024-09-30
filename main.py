@@ -23,6 +23,12 @@ KeyType = int
 ValueType = int
 ProcessType = str
 
+counter = 0
+def unique_id():
+    global counter
+    counter = counter + 1
+    return counter
+
 
 class ConstraintPair:
     def __init__(self, op1, op2):
@@ -31,18 +37,19 @@ class ConstraintPair:
 
 
 class Operation:
-    def __init__(self, cmd, inv, key, val=None):
+    def __init__(self, cmd, inv, key, unique_id, val=None):
         self.cmd = cmd
         self.key = key
         self.inv = inv
         self.resp = None
+        self.unique_id = unique_id
         self.val = val
 
     def set_resp(self, resp):
         self.resp = resp
 
     def __str__(self):
-        return "{0}_{1}_{2}".format(self.cmd, self.key, self.val)
+        return "{0}_{1}_{2}_{3}".format(self.cmd, self.key, self.val, self.unique_id)
         # return "cmd: {0}, key: {1}, inv: {2}, resp: {3}, val: {4}" \
         #     .format(self.cmd, self.key, self.inv, self.resp, self.val)
 
@@ -66,6 +73,7 @@ class ConstraintsGenerator:
         self.successors = {}  # map of operations to set of successors
         self.matches = {}  # map of read operation to write operation
         self.alreadyUNSAT = False  # already found an unsatisfiable condition
+        self.already_matched = set()
 
     def __str__(self):
         result = ""
@@ -94,10 +102,10 @@ class ConstraintsGenerator:
             if action.call == CallType.INV:
                 if action.cmd == Command.WRITE:
                     proc2Op[action.proc] = Operation(action.cmd, timestamp,
-                                                     action.k, val=action.val)
+                                                     action.k, val=action.val, unique_id=unique_id())
                 elif action.cmd == Command.READ:
                     proc2Op[action.proc] = Operation(action.cmd, timestamp,
-                                                     action.k)
+                                                     action.k, unique_id=unique_id())
             elif action.call == CallType.RESP:
                 op = proc2Op[action.proc]
                 op.set_resp(timestamp)
@@ -133,11 +141,15 @@ class ConstraintsGenerator:
         """
 
         for op in ops:
+            if op in self.already_matched:
+                continue
             if op.cmd == Command.WRITE and op.val == read_op.val and \
                     op.inv <= read_op.resp and op.key == read_op.key:
                 self.matches[read_op] = op
                 self.successors[op].add(read_op)
                 self.predecessors[read_op].add(op)
+                self.already_matched.add(read_op)
+                self.already_matched.add(op)
                 return True
 
         self.alreadyUNSAT = True
@@ -209,7 +221,7 @@ def z3solver(cg):
 
     successors = cg.successors
     for op, succs in successors.items():
-        # print("op", op)
+        print("op", op)
         if op not in symbols:
             symbols[op] = Int(str(op))
         for succ in succs:
