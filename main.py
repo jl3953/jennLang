@@ -43,6 +43,7 @@ class Operation:
         self.key = key
         self.inv = inv
         self.resp = None
+        self.unique_id = unique_id
         self.val = val
         self.unique_id = get_unique_id()
 
@@ -74,6 +75,7 @@ class ConstraintsGenerator:
         self.successors = {}  # map of operations to set of successors
         self.matches = {}  # map of read operation to write operation
         self.alreadyUNSAT = False  # already found an unsatisfiable condition
+        self.already_matched = set()
 
     def __str__(self):
         result = ""
@@ -141,11 +143,15 @@ class ConstraintsGenerator:
         """
 
         for op in ops:
+            if op in self.already_matched:
+                continue
             if op.cmd == Command.WRITE and op.val == read_op.val and \
                     op.inv <= read_op.resp and op.key == read_op.key:
                 self.matches[read_op] = op
                 self.successors[op].add(read_op)
                 self.predecessors[read_op].add(op)
+                self.already_matched.add(read_op)
+                self.already_matched.add(op)
                 return True
 
         self.alreadyUNSAT = True
@@ -217,7 +223,7 @@ def z3solver(cg):
 
     successors = cg.successors
     for op, succs in successors.items():
-        # print("op", op)
+        print("op", op)
         if op not in symbols:
             symbols[op] = Int(str(op))
         for succ in succs:
