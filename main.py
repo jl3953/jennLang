@@ -75,7 +75,7 @@ class ConstraintsGenerator:
         self.successors = {}  # map of operations to set of successors
         self.matches = {}  # map of read operation to write operation
         self.alreadyUNSAT = False  # already found an unsatisfiable condition
-        self.already_matched = set()
+        # self.already_matched = set()
 
     def __str__(self):
         result = ""
@@ -143,15 +143,15 @@ class ConstraintsGenerator:
         """
 
         for op in ops:
-            if op in self.already_matched:
-                continue
+            # if op in self.already_matched:
+                # continue
             if op.cmd == Command.WRITE and op.val == read_op.val and \
                     op.inv <= read_op.resp and op.key == read_op.key:
                 self.matches[read_op] = op
                 self.successors[op].add(read_op)
                 self.predecessors[read_op].add(op)
-                self.already_matched.add(read_op)
-                self.already_matched.add(op)
+                # self.already_matched.add(read_op)
+                # self.already_matched.add(op)
                 return True
 
         self.alreadyUNSAT = True

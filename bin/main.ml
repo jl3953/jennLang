@@ -320,7 +320,7 @@ let interp (f : string) : unit =
   sync_exec global_state prog;
 
   
-  for _ = 0 to 64 do
+  for _ = 0 to 15 do
     if (List.length global_state.free_clients > 0) then 
       begin
         let choose_client_threshold = chain_len + 1 in (* possible reads + a possible write *)
@@ -379,6 +379,6 @@ let interp (f : string) : unit =
     print_global_nodes global_state.nodes;
 ;;
   
-interp "bin/buggyCRAQ.jenn"
+interp "bin/CRAQ.jenn"
 let () = print_endline "Program recognized as valid!"
 let () = print_endline "Program ran successfully!"
