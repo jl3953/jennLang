@@ -531,21 +531,18 @@ let schedule_record (state : state) (program : program) (unique_id: int) : unit 
         end else
           pick (n-1) (r::before) rs
     in
-    (* let rando = Random.int (List.length state.records) in *)
-    let head = List.hd state.records in
-    let vert = head.pc in 
-    let rando = 
-      match (CFG.label program.cfg vert) with
-      | Instr (_, _) -> 0
-      | Pause _ -> if (List.length state.records) == 1 then 0 else 1
-      | Await (_, _, _) -> if (List.length state.records) == 1 then 0 else 1
-      | Return _ -> 0
-      | Cond (_, _, _) -> 0
-      | ForLoopIn (_, _, _, _) -> 0
+    let r = Random.self_init(); Random.int (List.length state.records) in
+    (* let record = List.nth state.records r in
+    let vert = record.pc in  *)
+    let idx = r
+      (* match (CFG.label program.cfg vert) with
+      | Pause _
+      | Await (_, _, _) -> if (List.length state.records) == 1 then 0 else r
+      | _ -> r *)
     in
-    print_endline ("chosen idx " ^ string_of_int rando);
+    print_endline ("chosen idx " ^ string_of_int idx);
     print_endline "";
-    pick rando [] state.records
+    pick idx [] state.records
     (* pick 0 [] state.records *)
   end
 

@@ -4,6 +4,7 @@ open Mylib.Simulator
 
 (*Parametrize first*)
 (* TOPOLOGIES = ["LINEAR"; "STAR"; "RING"; "FULL"] *)
+
 let num_servers = 5
 let num_clients = 3
 let chain_len = 3
@@ -22,6 +23,11 @@ let mod_op (i : int) (m : int): int =
     i + m
   else
     i mod m
+
+let jenns_birthday_counter = ref 214
+let increment_birthday () : int = 
+  jenns_birthday_counter := !jenns_birthday_counter + 1;
+  !jenns_birthday_counter
 
 let global_state = 
       { nodes = Array.init (num_servers + num_clients) (fun _ -> Env.create 91) 
@@ -309,7 +315,31 @@ let interp (f : string) : unit =
     let ast = parse_file f in 
     process_program ast in 
   init_topology topology global_state prog;
-  schedule_client global_state prog "write" [VNode 0; VString "birthday"; VInt 812] 0;
+
+  schedule_client global_state prog "write" [VNode 0; VString "birthday"; VInt 214] 0;
+  sync_exec global_state prog;
+
+  
+  for _ = 0 to 64 do
+    if (List.length global_state.free_clients > 0) then 
+      begin
+        let choose_client_threshold = chain_len + 1 in (* possible reads + a possible write *)
+        let random_int = Random.self_init(); Random.int (List.length global_state.records + choose_client_threshold) in
+        if (random_int == 0) then 
+          schedule_client global_state prog "write" [VNode 0; VString "birthday"; VInt (increment_birthday())] 0
+        else if (random_int < choose_client_threshold) then
+          let read_node = Random.self_init(); Random.int chain_len in
+          schedule_client global_state prog "read" [VNode read_node; VString "birthday"] 0
+        else 
+          schedule_record global_state prog (-1)
+      end
+    else if (List.length global_state.records > 0) then
+      schedule_record global_state prog (-1)
+  done;
+
+  sync_exec global_state prog;
+
+  (* schedule_client global_state prog "write" [VNode 0; VString "birthday"; VInt 812] 0;
   sync_exec global_state prog;
   schedule_client global_state prog "read" [VNode 0; VString "birthday"] 0;
   sync_exec global_state prog; 
@@ -322,7 +352,7 @@ let interp (f : string) : unit =
   schedule_client global_state prog "write" [VNode 0; VString "university"; VString "Princeton"] 0;
   sync_exec global_state prog;
   schedule_client global_state prog "read" [VNode 0; VString "university"] 0;
-  sync_exec global_state prog;
+  sync_exec global_state prog; *)
   
   let oc = open_out "output.csv" in
   Printf.fprintf oc "ClientID,Kind,Action,Node,Payload,Value\n";
@@ -349,6 +379,6 @@ let interp (f : string) : unit =
     print_global_nodes global_state.nodes;
 ;;
   
-interp "bin/CRAQ.jenn"
+interp "bin/buggyCRAQ.jenn"
 let () = print_endline "Program recognized as valid!"
 let () = print_endline "Program ran successfully!"

@@ -23,6 +23,12 @@ KeyType = int
 ValueType = int
 ProcessType = str
 
+unique_id = 0
+def get_unique_id():
+    global unique_id
+    unique_id += 1
+    return unique_id
+
 
 class ConstraintPair:
     def __init__(self, op1, op2):
@@ -31,18 +37,20 @@ class ConstraintPair:
 
 
 class Operation:
-    def __init__(self, cmd, inv, key, val=None):
+    def __init__(self, proc, cmd, inv, key, val=None):
+        self.proc = proc
         self.cmd = cmd
         self.key = key
         self.inv = inv
         self.resp = None
         self.val = val
+        self.unique_id = get_unique_id()
 
     def set_resp(self, resp):
         self.resp = resp
 
     def __str__(self):
-        return "{0}_{1}_{2}".format(self.cmd, self.key, self.val)
+        return "{0}_{1}_{2}_proc{3}_{4}".format(self.cmd, self.key, self.val, self.proc, self.unique_id)
         # return "cmd: {0}, key: {1}, inv: {2}, resp: {3}, val: {4}" \
         #     .format(self.cmd, self.key, self.inv, self.resp, self.val)
 
@@ -93,10 +101,10 @@ class ConstraintsGenerator:
             action = actions[timestamp]
             if action.call == CallType.INV:
                 if action.cmd == Command.WRITE:
-                    proc2Op[action.proc] = Operation(action.cmd, timestamp,
+                    proc2Op[action.proc] = Operation(action.proc, action.cmd, timestamp,
                                                      action.k, val=action.val)
                 elif action.cmd == Command.READ:
-                    proc2Op[action.proc] = Operation(action.cmd, timestamp,
+                    proc2Op[action.proc] = Operation(action.proc, action.cmd, timestamp,
                                                      action.k)
             elif action.call == CallType.RESP:
                 op = proc2Op[action.proc]
