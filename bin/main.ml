@@ -320,7 +320,7 @@ let interp (f : string) : unit =
   sync_exec global_state prog;
 
   
-  for _ = 0 to 15 do
+  for _ = 0 to 100 do
     if (List.length global_state.free_clients > 0) then 
       begin
         let choose_client_threshold = chain_len + 1 in (* possible reads + a possible write *)
