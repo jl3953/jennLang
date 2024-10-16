@@ -1,6 +1,7 @@
 import csv
 import sys
 from enum import Enum
+import argparse
 
 from z3 import *
 
@@ -300,6 +301,11 @@ def parseTrace(outfile):
 
 
 def main():
+
+    parser = argparse.ArgumentParser(description="Check linearizability.")
+    parser.add_argument("intermediate_file", type=str)
+    args = parser.parse_args()
+
     actions = [
         Action("a", CallType.INV, Command.WRITE, k=14, val=1),
         Action("b", CallType.INV, Command.WRITE, k=14, val=2),
@@ -323,7 +329,7 @@ def main():
     #     Action("b", CallType.RESP, Command.OK, val=1),
     # ]
 
-    outfile = "output.csv"
+    outfile = args.intermediate_file
     actions = parseTrace(outfile)
     # actions = [
     #     Action("x", CallType.INV, Command.READ, k=14),
@@ -347,7 +353,8 @@ def main():
             sorted_ops = [str(op) for op, _ in
                           sorted(solution.items(), key=lambda item: item[1])]
             print(" < ".join(sorted_ops))
-    return 0
+            return 0
+    return -1
 
 
 if __name__ == "__main__":

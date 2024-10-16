@@ -308,11 +308,11 @@ let print_global_nodes (nodes : (value Env.t) array) =
     print_endline "";
   ) nodes
 
-let interp (f : string) : unit =
+let interp (spec : string) (intermediate_output : string) : unit =
   (* Load the program into the simulator *)
-  let _ = parse_file f in ();
+  let _ = parse_file spec in ();
   let prog = 
-    let ast = parse_file f in 
+    let ast = parse_file spec in 
     process_program ast in 
   init_topology topology global_state prog;
 
@@ -338,23 +338,8 @@ let interp (f : string) : unit =
   done;
 
   sync_exec global_state prog;
-
-  (* schedule_client global_state prog "write" [VNode 0; VString "birthday"; VInt 812] 0;
-  sync_exec global_state prog;
-  schedule_client global_state prog "read" [VNode 0; VString "birthday"] 0;
-  sync_exec global_state prog; 
-  schedule_client global_state prog "triggerFailover" [VNode 0; VNode 1; VNode 3] 0;
-  sync_exec global_state prog;
-  schedule_client global_state prog "triggerFailover" [VNode 2; VNode 1; VNode 3] 0;
-  sync_exec global_state prog;
-  schedule_client global_state prog "triggerFailover" [VNode 3; VNode 1; VNode 3] 0;
-  sync_exec global_state prog;
-  schedule_client global_state prog "write" [VNode 0; VString "university"; VString "Princeton"] 0;
-  sync_exec global_state prog;
-  schedule_client global_state prog "read" [VNode 0; VString "university"] 0;
-  sync_exec global_state prog; *)
   
-  let oc = open_out "output.csv" in
+  let oc = open_out intermediate_output in
   Printf.fprintf oc "ClientID,Kind,Action,Node,Payload,Value\n";
   DA.iter (fun op -> 
     Printf.fprintf oc "%d," op.client_id
@@ -376,9 +361,25 @@ let interp (f : string) : unit =
       op.payload
     ; Printf.fprintf oc "\n"
     ) global_state.history;
-    print_global_nodes global_state.nodes;
+    print_global_nodes global_state.nodes
+
+let handle_arguments () : string * string = 
+  if Array.length Sys.argv < 3 then
+    begin
+      Printf.printf "Usage: %s <spec> <intermediate_output>\n" Sys.argv.(0);
+      exit 1
+    end
+  else
+    begin
+      let spec = Sys.argv.(1) in
+      let intermediate_output = Sys.argv.(2) in
+      Printf.printf "Input spec: %s, intermediate output %s\n" spec intermediate_output;
+      (spec, intermediate_output)
+    end
 ;;
   
-interp "bin/CRAQ.jenn"
-let () = print_endline "Program recognized as valid!"
-let () = print_endline "Program ran successfully!"
+let () = 
+let spec, intermediate_output = handle_arguments () in 
+interp spec intermediate_output;
+print_endline "Program recognized as valid!";
+print_endline "Program ran successfully!"

@@ -1,3 +1,4 @@
 _build/*
 output*.csv
 *.bk.*
+output_dump/*
