@@ -17,6 +17,9 @@ Node {
 
     func Write(key, value) -> none {
         if (role == "Head") {
+            if (is_committed[key] == false) {
+                await is_committed[key] == true;
+            }
             db[key] = value;
             is_committed[key] = false;
             rpc_async_call(successor, Write(key, value));

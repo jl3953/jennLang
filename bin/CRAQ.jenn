@@ -2,7 +2,7 @@ Node {
     string role = "";
     map<Key, Value> db = {};
     map<Key, bool> is_committed = {};
-    map<Key, int> versions = {};
+    //map<Key, int> versions = {};
     int predecessor = 0;
     int pred_predecessor = 0;
     int successor = 0;
@@ -92,14 +92,14 @@ Node {
         tail = t;
         db = {};
         is_committed = {};
-        versions = {};
+        //versions = {};
         self = s;
 
         for (key, value in data) {
             temp = 1;
             db[key] = value;
             is_committed[key] = true;
-            versions[key] = 0;
+            //versions[key] = 0;
         }
     }
 

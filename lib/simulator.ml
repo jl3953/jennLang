@@ -17,9 +17,9 @@ module DA = BatDynArray
      A's activation record is blocked forever.  The proposed alternative is that
      an RPC that nomially returns a string evaluates to Future<string>.  We can
      manipulate a valute of type Future<string> by
-     - checking whether its value is available (e.g. fut.isAvailable() -> bool)
+   - checking whether its value is available (e.g. fut.isAvailable() -> bool)
        (nonpreemptible)
-     - retrieving its value (e.g. fut.isValue() -> string) (preemptible)
+   - retrieving its value (e.g. fut.isValue() -> string) (preemptible)
    - In general, I do not understand how "Roles" should be implemented
 *)
 
@@ -92,6 +92,21 @@ type 'a label =
   | Cond of expr * 'a * 'a
   | ForLoopIn of lhs * expr * 'a * 'a
 
+let to_string(l: 'a label) : string =
+  match l with
+  | Instr (i, _) -> 
+    begin
+      match i with 
+      | Async (_, _, f, _) -> "instr async to " ^ f
+      | Assign (_, _) -> "instr assign"
+      | Copy (_, _) -> "instr copy"
+    end
+  | Pause _ -> "Pause"
+  | Await _ -> "Await"
+  | Return _ -> "Return"
+  | Cond _ -> "Cond"
+  | ForLoopIn _ -> "ForLoopIn"
+
 module CFG : sig
   type t (* jenndbg: control flow graph type *)
   type vertex (* jenndbg: vertex of the control flow graph *)
@@ -163,17 +178,15 @@ type program =
   ; rpc : function_info Env.t 
   ; client_ops : function_info Env.t }(* jenndbg why does an RPC handler need a list of function info *)
 
+
+
 let load (var : string) (env : record_env) : value =
   try begin 
-    let v = Env.find env.local_env var in 
-    (* let _ = print_endline ("Found local " ^ var) in *)
-    v
+    Env.find env.local_env var
   end
   with Not_found -> begin 
-    let v = Env.find env.node_env var in
-    (* let _ = print_endline ("Found node " ^ var) in  *)
-    v
-  end
+      Env.find env.node_env var
+    end
 
 (* Evaluate an expression in the context of an environment. *)
 let rec eval (env : record_env) (expr : expr) : value =
@@ -212,20 +225,20 @@ let rec eval (env : record_env) (expr : expr) : value =
   | EMap kvpairs -> 
     let rec makemap (kvpairs : (string * expr) list) : (value, value) Hashtbl.t =
       begin match kvpairs with
-      | [] -> Hashtbl.create 91
-      | (k, v) :: rest ->
-        let tbl = makemap rest in
-        Hashtbl.add (makemap rest) (VString k) (eval env v); 
-        tbl
+        | [] -> Hashtbl.create 91
+        | (k, v) :: rest ->
+          let tbl = makemap rest in
+          Hashtbl.add (makemap rest) (VString k) (eval env v); 
+          tbl
       end in 
-      VMap (makemap kvpairs)
+    VMap (makemap kvpairs)
   | EList exprs ->
     let rec makelist (exprs : expr list) : value list =
       begin match exprs with
-      | [] -> []
-      | e :: rest -> (eval env e) :: (makelist rest)
+        | [] -> []
+        | e :: rest -> (eval env e) :: (makelist rest)
       end in
-      VList (makelist exprs)
+    VList (makelist exprs)
   | EString s -> VString s
 
 let rec eval_lhs (env : record_env) (lhs : lhs) : lvalue =
@@ -234,7 +247,6 @@ let rec eval_lhs (env : record_env) (lhs : lhs) : lvalue =
   | LAccess (lhs, exp) ->
     begin match eval_lhs env lhs with
       | LVVar var ->
-        print_endline ("Accessing " ^ var);
         begin match load var env with
           | VMap map -> LVAccess (eval env exp, map)
           | _ -> failwith "LVVar eval_lhs fail"
@@ -251,15 +263,10 @@ let rec eval_lhs (env : record_env) (lhs : lhs) : lvalue =
 let store (lhs : lhs) (vl : value) (env : record_env) : unit =
   match eval_lhs env lhs with
   | LVVar var -> 
-    if Env.mem env.local_env var then begin
-      (* print_endline ("Replacing local " ^ var); *)
+    if Env.mem env.local_env var then
       Env.replace env.local_env var vl
-    end
     else
-      begin
-        (* print_endline ("Replacing node " ^ var); *)
-        Env.replace env.node_env var vl
-      end
+      Env.replace env.node_env var vl
   | LVAccess (key, table) ->
     Hashtbl.replace table key vl
   | LVTuple _ -> failwith "how to store LVTuples?"
@@ -270,68 +277,38 @@ let copy (lhs : lhs) (vl : value) (env : record_env) : unit =
   match eval_lhs env lhs with 
   | LVVar var ->
     begin match vl with
-    | VMap m -> 
-      let temp = Hashtbl.copy m in
-      Env.replace env.local_env var (VMap temp)
-    | VList l ->
-      let temp = List.map (fun x -> x) l in
-      Env.replace env.local_env var (VList temp)
-    | _ -> failwith "no copying non-collections"
+      | VMap m -> 
+        let temp = Hashtbl.copy m in
+        Env.replace env.local_env var (VMap temp)
+      | VList l ->
+        let temp = List.map (fun x -> x) l in
+        Env.replace env.local_env var (VList temp)
+      | _ -> failwith "no copying non-collections"
     end
   | _ -> failwith "copying only to local_copy"
 
-let function_info name program = 
-  print_endline ("rpc name: " ^ name); 
-  Env.find program.rpc name
+let function_info name program = Env.find program.rpc name
 
 (* Execute record until pause/return.  Invariant: record does *not* belong to
    state.records *)
-let exec (state : state) (program : program) (record : record) =
+let exec (state : state) (program : program) (record : record)  =
   let env =
     { local_env = record.env; node_env = state.nodes.(record.node) }
   in
   let rec loop () =
     match CFG.label program.cfg record.pc with
     | Instr (instr, next) -> 
-      print_endline "Instr";
       record.pc <- next;
       begin match instr with
         | Async (lhs, node, func, actuals) -> 
-          let roleName = match node with 
-          | EVar v -> v
-          | EString s -> s
-          | _ -> failwith "Async type fail" in
-          let () = print_endline ("\tAsync " ^ roleName) in 
-          (* let node = 
-            begin match (eval env nodeVar) with
-            | VString s -> s
-            | VBool _ -> failwith "Type error bool"
-            | VInt _ -> failwith "Type error int"
-            | VMap _ -> failwith "Type error map"
-            | VOption _ -> failwith "Type error option"
-            | VFuture _ -> failwith "Type error future"
-            | VNode _ -> failwith "Type error node"
-            end in *)
-          (* print_endline ("\tAsync node " ^ node); *)
           begin match eval env node with
             | VNode node_id ->
+              Printf.printf "executing async to from node %d to node %d %s \n" record.node node_id func;
               let new_future = ref None in
               let { entry; formals; _ } = function_info func program in
               let new_env = Env.create 91 in
               List.iter2 (fun (formal, _) actual ->
-                  print_endline ("formal: " ^ formal);
-                  begin match actual with
-                  | EVar v -> print_endline ("EVar " ^ v)
-                  | EInt i -> print_endline ("EInt " ^ string_of_int i)
-                  | EBool b -> print_endline ("EBool " ^ string_of_bool b)
-                  | EFind (_, _) -> print_endline "EFind"
-                  | EMap _ -> print_endline "EMap"
-                  | EString s -> print_endline ("EString " ^ s)
-                  | _ -> failwith "what type are you"
-                  end;
-                  Env.add new_env formal (eval env actual))
-                formals
-                actuals;
+                  Env.add new_env formal (eval env actual)) formals actuals;
               let new_record =
                 { node = node_id
                 ; pc = entry
@@ -340,7 +317,7 @@ let exec (state : state) (program : program) (record : record) =
                 ; id = record.id}
               in
               store lhs (VFuture new_future) env
-              ; state.records <- new_record::state.records
+            ; state.records <- new_record::state.records
             | VBool _ -> failwith "Type error bool"
             | VInt _ -> failwith "Type error int"
             | VMap _ -> failwith "Type error map"
@@ -349,59 +326,32 @@ let exec (state : state) (program : program) (record : record) =
             | VFuture _ -> failwith "Type error future"
             | VString role -> 
               begin match load role env with 
-              | VNode node_id ->
-                let new_future = ref None in
-                print_endline ("Find func " ^ func ^ " for node " ^ string_of_int node_id);
-                let { entry; formals; _ } = function_info func program in
-                let new_env = Env.create 91 in
-                List.iter2 (fun (formal, _) actual ->
-                    Env.add new_env formal (eval env actual))
-                  formals
-                  actuals;
-                let new_record =
-                  { node = node_id
-                  ; pc = entry
-                  ; continuation = (fun value -> new_future := Some value)
-                  ; env = new_env 
-                  ; id = record.id}
-                in
-                store lhs (VFuture new_future) env
+                | VNode node_id ->
+                  let new_future = ref None in
+                  let { entry; formals; _ } = function_info func program in
+                  let new_env = Env.create 91 in
+                  List.iter2 (fun (formal, _) actual ->
+                      Env.add new_env formal (eval env actual))
+                    formals
+                    actuals;
+                  let new_record =
+                    { node = node_id
+                    ; pc = entry
+                    ; continuation = (fun value -> new_future := Some value)
+                    ; env = new_env 
+                    ; id = record.id}
+                  in
+                  store lhs (VFuture new_future) env
                 ; state.records <- new_record::state.records
-              | _ -> failwith "Type error idk what you are anymore"
+                | _ -> failwith "Type error idk what you are anymore"
               end
           end
         | Assign (lhs, rhs) -> 
-          print_endline ("\tAssign executing on node " ^ string_of_int record.node);
-          begin match lhs with
-          | LVar v -> print_endline ("LVar " ^ v)
-          | LAccess (map, key)  ->
-            begin match map with 
-            | LVar map_name -> 
-              begin match eval env key with
-              | VString k -> print_endline ("LAccess " ^ map_name ^ "[" ^ k ^ "]")
-              | VInt k -> print_endline ("LAccess " ^ map_name ^ "[" ^ string_of_int k ^ "]")
-              | _ -> print_endline "What are you doing hurdur"
-              end
-            | _ -> print_endline "What are you doing"
-            end
-          | LTuple _ -> print_endline "LTuple"
-          end;
-          begin match (eval env rhs) with
-          | VInt i -> print_endline ("\t\tVInt " ^ string_of_int i)
-          | VBool b -> print_endline ("\t\tVBool " ^ string_of_bool b)
-          | VMap _ -> print_endline "\t\tVMap"
-          | VList _ -> print_endline "\t\tVList"
-          | VOption _ -> print_endline "\t\tVOption"
-          | VFuture _ -> print_endline "\t\tVFuture"
-          | VString s -> print_endline ("\t\tVString " ^ s)
-          | VNode n -> print_endline ("\t\tVNode " ^ string_of_int n)
-          end;
           store lhs (eval env rhs) env;
         | Copy (lhs, rhs) -> copy lhs (eval env rhs) env;
       end;
       loop ()
     | Cond (cond, bthen, belse) -> 
-      (* print_endline "Cond"; *)
       begin match eval env cond with
         | VBool true ->
           record.pc <- bthen
@@ -411,140 +361,150 @@ let exec (state : state) (program : program) (record : record) =
       end;
       loop ()
     | Await (lhs, expr, next) -> 
-      print_endline "Await"; 
-      begin match expr with 
-      | EVar v -> print_endline ("EVar " ^ v)
-      | EInt i -> print_endline ("EInt " ^ string_of_int i)
-      | EBool b -> print_endline ("EBool " ^ string_of_bool b)
-      | EFind (_, _) -> print_endline "EFind"
-      | EMap _ -> print_endline "EMap"
-      | EString s -> print_endline ("EString " ^ s)
-      | ENot _ -> print_endline "ENot"
-      | EAnd _ -> print_endline "EAnd"
-      | EOr _ -> print_endline "EOr"
-      | EEqualsEquals _ -> print_endline "EEqualsEquals"
-      | EList _ -> print_endline "EList"
-      end;
-      print_endline ("On node " ^ string_of_int record.node);
       begin match eval env expr with
         | VFuture fut -> 
-          print_endline "\tVFuture";
           begin match !fut with
             | Some value -> 
-              print_endline "\t\tSome";
               record.pc <- next;
               store lhs value env;
               loop ()
             | None -> 
-              print_endline "\t\tNone";
               (* Still waiting.  TODO: should keep blocked records in a
                  different data structure to avoid scheduling records that
                  can't do any work. *)
               state.records <- record::state.records
           end
         | VBool b -> 
-          begin match b with
-          | true -> 
-            print_endline "\tVBool true";
-            record.pc <- next;
-            loop ()
-          | false -> 
-            print_endline "\tVBool false";
+          if b then 
+            begin
+              record.pc <- next; 
+              loop()
+            end
+          else 
             state.records <- record::state.records
-          end
         | _ -> failwith "Type error!"
       end
     | Return expr -> 
-      print_endline "Return";
       record.continuation (eval env expr)
     | Pause next -> 
-      (* print_endline "Pause"; *)
       record.pc <- next;
       state.records <- record::state.records
     | ForLoopIn (lhs, expr, body, next) -> 
       begin match eval env expr with
-      | VMap map -> 
-        (* First remove the pair being processed from the map. *)
-        if (Hashtbl.length map) == 0 then 
-          begin
-          print_endline "jenndebug made it here";
-          record.pc <- next;
-          loop()
-          end
-        else
-          let single_pair = 
-          let result_ref = ref None in Hashtbl.iter (fun key value ->
-            match !result_ref with
-             Some _ -> ()  (* We already found a pair, so do nothing *)
-             | None -> result_ref := Some (key, value)
-             ) map;
-          !result_ref in
-          Hashtbl.remove map (fst (Option.get single_pair));
-          store (LVar "local_copy") (VMap map) env;
-          (* let new_env = 
-            let create_env = Env.create 91 in
-            Env.iter (fun k v ->
-            Env.add create_env k v) 
-            env.local_env; create_env in *)
-          begin match lhs with
-          | LTuple [key; value] -> 
-            let (k, v) = Option.get single_pair in
-            Env.add env.node_env key k;
-            Env.add env.node_env value v;
-            record.pc <- body;
-            loop () 
-          | _ -> failwith "Cannot iterate through map with anything other than a 2-tuple"
-          end
-      | _ -> failwith "Type error!"
+        | VMap map -> 
+          (* First remove the pair being processed from the map. *)
+          if (Hashtbl.length map) == 0 then 
+            begin
+              record.pc <- next;
+              loop()
+            end
+          else
+            let single_pair = 
+              let result_ref = ref None in Hashtbl.iter (fun key value ->
+                  match !result_ref with
+                    Some _ -> ()  (* We already found a pair, so do nothing *)
+                  | None -> result_ref := Some (key, value)
+                ) map;
+              !result_ref in
+            Hashtbl.remove map (fst (Option.get single_pair));
+            store (LVar "local_copy") (VMap map) env;
+            begin match lhs with
+              | LTuple [key; value] -> 
+                let (k, v) = Option.get single_pair in
+                Env.add env.node_env key k;
+                Env.add env.node_env value v;
+                record.pc <- body;
+                loop () 
+              | _ -> failwith "Cannot iterate through map with anything other than a 2-tuple"
+            end
+        | _ -> failwith "Type error!"
       end
   in
   loop ()
 
-let schedule_record (state : state) (program : program) (unique_id: int) : unit =
-  print_int (List.length state.records);
-  print_endline " scheduling records left";
-  if unique_id > 0 then
-    begin
-    print_endline ("unique_id " ^ string_of_int unique_id);
-    let rec pick before after =
-      match after with
-      | [] -> print_endline "Halt"; raise Halt
-      | (r::rs) -> 
-        if r.id == unique_id then begin
-          state.records <- List.rev_append before rs;
-          exec state program r
-        end else
-          pick (r::before) rs
-    in
-    pick [] state.records
-  end
-  else
-    begin
-    print_endline "no unique_id";
-    let rec pick n before after =
-      match after with
-      | [] -> print_endline "Halt"; raise Halt
-      | (r::rs) -> 
-        if n == 0 then begin
-          state.records <- List.rev_append before rs;
-          exec state program r
-        end else
-          pick (n-1) (r::before) rs
-    in
-    let r = Random.self_init(); Random.int (List.length state.records) in
-    (* let record = List.nth state.records r in
-    let vert = record.pc in  *)
-    let idx = r
-      (* match (CFG.label program.cfg vert) with
-      | Pause _
-      | Await (_, _, _) -> if (List.length state.records) == 1 then 0 else r
-      | _ -> r *)
-    in
-    print_endline ("chosen idx " ^ string_of_int idx);
-    print_endline "";
-    pick idx [] state.records
-    (* pick 0 [] state.records *)
-  end
+let schedule_record (state : state) (program : program) 
+    (randomly_drop_msgs: bool) 
+    (partition_away_node: bool) 
+    (cut_tail_from_mid : bool)
+    (* (sever_all_but_mid : bool ) *)
+    : unit =
+  let rec pick n before after =
+    match after with
+    | [] ->  raise Halt
+    | (r::rs) -> 
+      if n == 0 then begin
+        let env =
+          { local_env = r.env; node_env = state.nodes.(r.node) } in
+        state.records <- List.rev_append before rs;
+        begin 
+          match CFG.label program.cfg r.pc with
+          | Instr (i,_) ->
+            begin match i with 
+              | Async (_, node, f, _) -> 
+                let node_id = match eval env node with 
+                  | VNode n_id -> n_id
+                  | _ -> failwith "Type error!" in
+                let should_execute = ref true in
+                begin
+                  if randomly_drop_msgs && (Random.self_init(); Random.float 1.0 < 0.5) then
+                    begin
+                      Printf.printf "drop msg to node %d\n" node_id;
+                      should_execute := false
+                    end
+                end;
+                begin
+                  if partition_away_node && node_id == 1 then
+                    begin
+                      Printf.printf "partition off msgs to node %d func %s\n" node_id f;
+                      should_execute := false
+                    end
+                end;
+                begin
+                  let src_node = r.node in
+                  let dest_node = node_id in
+                  Printf.printf "should sever ties? %b\n" cut_tail_from_mid;
+                  if cut_tail_from_mid && (
+                      (src_node == 2 && dest_node == 1) || (dest_node == 2 && src_node == 1)) then
+                    begin
+                      Printf.printf "sever msgs from node %d to %d\n" src_node dest_node;
+                      should_execute := false
+                    end
+                end;
+                (* begin
+                   let src_node = r.node in
+                   let dest_node = node_id in
+                   if sever_all_but_mid &&
+                     ((src_node == 1 && dest_node == 2) || (src_node == 2 && dest_node == 1)) then
+                    ()
+                   else
+                    begin
+                      Printf.printf "sever all msg to tail except from mid\n";
+                      should_execute := false
+                    end
+                   end; *)
+                begin
+                  if !should_execute then
+                    exec state program r
+                  (* else if sever_all_but_mid then *)
+                    (* () *)
+                end
+              | _ -> exec state program r
+            end
+          | anything -> print_endline (to_string anything); exec state program r
+        end
+      end else
+        pick (n-1) (r::before) rs
+  in
+  let idx = (Random.self_init(); Random.int (List.length state.records)) in
+  (* let chosen_record = List.nth state.records idx in *)
+  (* let vert = chosen_record.pc in  *)
+  let chosen_idx = idx
+    (* match (CFG.label program.cfg vert) with *)
+    (* | Pause _ *)
+    (* | Await (_, _, _) -> if (List.length state.records) == 1 then 0 else idx *)
+    (* | _ -> idx *)
+  in
+  pick chosen_idx [] state.records
 
 (* Choose a client without a pending operation, create a new activation record
    to execute it, and append the invocation to the history *)
@@ -554,22 +514,12 @@ let schedule_client (state : state) (program : program) (func_name : string) (ac
     | [] -> raise Halt 
     | (c::cs) ->
       if n == 0 then begin
-        let op =
-          print_endline ("func_name: " ^ func_name);
-          Env.find program.client_ops func_name
-          (* List.nth program.client_ops (Random.int (List.length program.client_ops)) *)
+        let op = Env.find program.client_ops func_name
         in
         let env = Env.create 91 in
-          List.iter2 (fun (formal, _) actual ->
-              Env.add env formal actual
+        List.iter2 (fun (formal, _) actual ->
+            Env.add env formal actual
           ) op.formals actuals;
-        (* let params =
-          List.map (fun (formal, _) ->
-              (* TODO: generate random parameters *)
-              let value = (VInt 0) in
-              Env.add env formal value;
-              value)
-            op.formals *)
         let invocation =
           { client_id = c
           ; op_action = op.name
@@ -603,4 +553,4 @@ let schedule_client (state : state) (program : program) (func_name : string) (ac
       end else
         pick (n-1) (c::before) cs
   in
-  pick (Random.int (List.length state.free_clients)) [] state.free_clients
+  pick (Random.self_init(); Random.int (List.length state.free_clients)) [] state.free_clients
