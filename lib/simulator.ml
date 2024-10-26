@@ -426,8 +426,12 @@ let schedule_record (state : state) (program : program)
     (randomly_drop_msgs: bool) 
     (partition_away_node: bool) 
     (cut_tail_from_mid : bool)
-    (* (sever_all_but_mid : bool ) *)
-    : unit =
+    (sever_all_but_mid : bool)
+  : unit =
+  begin
+    if false then
+      Printf.printf "%b %b %b %b\n" randomly_drop_msgs partition_away_node cut_tail_from_mid sever_all_but_mid;
+  end;
   let rec pick n before after =
     match after with
     | [] ->  raise Halt
@@ -446,7 +450,7 @@ let schedule_record (state : state) (program : program)
                   | _ -> failwith "Type error!" in
                 let should_execute = ref true in
                 begin
-                  if randomly_drop_msgs && (Random.self_init(); Random.float 1.0 < 0.5) then
+                  if randomly_drop_msgs && (Random.self_init(); Random.float 1.0 < 0.3) then
                     begin
                       Printf.printf "drop msg to node %d\n" node_id;
                       should_execute := false
@@ -462,35 +466,37 @@ let schedule_record (state : state) (program : program)
                 begin
                   let src_node = r.node in
                   let dest_node = node_id in
-                  Printf.printf "should sever ties? %b\n" cut_tail_from_mid;
                   if cut_tail_from_mid && (
-                      (src_node == 2 && dest_node == 1) || (dest_node == 2 && src_node == 1)) then
+                      (src_node = 2 && dest_node = 1) || (dest_node = 2 && src_node = 1)) then
                     begin
                       Printf.printf "sever msgs from node %d to %d\n" src_node dest_node;
                       should_execute := false
                     end
                 end;
-                (* begin
-                   let src_node = r.node in
-                   let dest_node = node_id in
-                   if sever_all_but_mid &&
-                     ((src_node == 1 && dest_node == 2) || (src_node == 2 && dest_node == 1)) then
-                    ()
-                   else
+                begin
+                  let src_node = r.node in
+                  let dest_node = node_id in
+                  if Printf.printf "should sever all but mid? %b\n" sever_all_but_mid; sever_all_but_mid then
                     begin
-                      Printf.printf "sever all msg to tail except from mid\n";
-                      should_execute := false
+                      if dest_node = 2 && not (src_node = 1) then
+                        begin
+                          Printf.printf "sever all msgs to tail except from mid. srcnode %d destnode %d %s\n" src_node dest_node f;
+                          should_execute := false
+                        end
+                      else if src_node = 2 && not (dest_node = 1) then
+                        begin
+                          Printf.printf "sever all msgs from tail except from mid. srcnode %d destnode %d %s\n" src_node dest_node f;
+                          should_execute := false
+                        end
                     end
-                   end; *)
+                end;
                 begin
                   if !should_execute then
                     exec state program r
-                  (* else if sever_all_but_mid then *)
-                    (* () *)
                 end
               | _ -> exec state program r
             end
-          | anything -> print_endline (to_string anything); exec state program r
+          | _ -> exec state program r
         end
       end else
         pick (n-1) (r::before) rs
@@ -499,10 +505,10 @@ let schedule_record (state : state) (program : program)
   (* let chosen_record = List.nth state.records idx in *)
   (* let vert = chosen_record.pc in  *)
   let chosen_idx = idx
-    (* match (CFG.label program.cfg vert) with *)
-    (* | Pause _ *)
-    (* | Await (_, _, _) -> if (List.length state.records) == 1 then 0 else idx *)
-    (* | _ -> idx *)
+  (* match (CFG.label program.cfg vert) with *)
+  (* | Pause _ *)
+  (* | Await (_, _, _) -> if (List.length state.records) == 1 then 0 else idx *)
+  (* | _ -> idx *)
   in
   pick chosen_idx [] state.records
 

@@ -5,9 +5,9 @@ open Mylib.Simulator
 (*Parametrize first*)
 (* TOPOLOGIES = ["LINEAR"; "STAR"; "RING"; "FULL"] *)
 
-let num_servers = 5
-let num_clients = 3
-let chain_len = 3
+let num_servers = 7
+let num_clients = 7
+let chain_len = 7
 let head_idx = 0
 let tail_idx = chain_len - 1
 let topology = "LINEAR"
@@ -219,7 +219,7 @@ let sync_exec (global_state : state) (prog : program)
     schedule_record global_state prog 
       randomly_drop_msgs 
       partition_away_node_one 
-      cut_tail_from_mid 
+      cut_tail_from_mid
       sever_all_to_tail_but_mid
   done
 
@@ -229,10 +229,11 @@ let bootlegged_sync_exec (global_state : state) (prog : program)
     (cut_tail_from_mid : bool)
     (sever_all_to_tail_but_mid : bool): unit = 
   for _ = 0 to 100000 do
+    if not ((List.length global_state.records) = 0) then
     schedule_record global_state prog 
       randomly_drop_msgs 
       partition_away_node 
-      cut_tail_from_mid 
+      cut_tail_from_mid
       sever_all_to_tail_but_mid
   done
 
@@ -342,13 +343,15 @@ let interp (spec : string) (intermediate_output : string) : unit =
   sync_exec global_state prog false false false false;
   print_endline "wrote 215";
 
-  schedule_client global_state prog "write" [VNode 0; VString "birthday"; VInt (increment_birthday())] 0;
-  bootlegged_sync_exec global_state prog false false false true;
+  (* schedule_client global_state prog "write" [VNode 0; VString "birthday"; VInt (increment_birthday())] 0; *)
+  (* bootlegged_sync_exec global_state prog false false false true; *)
+  (* sync_exec global_state prog false false false true; *)
 
-  schedule_client global_state prog "write" [VNode 0; VString "birthday"; VInt (increment_birthday())] 0;
-  bootlegged_sync_exec global_state prog false false false true;
+  (* schedule_client global_state prog "write" [VNode 0; VString "birthday"; VInt (increment_birthday())] 0; *)
+  (* bootlegged_sync_exec global_state prog false false false true; *)
+  (* sync_exec global_state prog false false false true; *)
 
-  (* for _ = 0 to 100 do
+  for _ = 0 to 500 do
      if (List.length global_state.free_clients > 0) then 
       begin
         let choose_client_threshold = chain_len + 1 in (* possible reads + a possible write *)
@@ -356,18 +359,18 @@ let interp (spec : string) (intermediate_output : string) : unit =
         if (random_int == 0) then 
           schedule_client global_state prog "write" [VNode 0; VString "birthday"; VInt (increment_birthday())] 0
         else if (random_int < choose_client_threshold) then
-          (* let read_node = Random.self_init(); Random.int chain_len in *)
-          (* Printf.printf "Reading from node %d\n" read_node; *)
-          (* schedule_client global_state prog "read" [VNode read_node; VString "birthday"] 0 *)
-          schedule_client global_state prog "write" [VNode 0; VString "birthday"; VInt (increment_birthday())] 0
+          let read_node = Random.self_init(); Random.int chain_len in
+          Printf.printf "Reading from node %d\n" read_node;
+          schedule_client global_state prog "read" [VNode read_node; VString "birthday"] 0
+          (* schedule_client global_state prog "write" [VNode 0; VString "birthday"; VInt (increment_birthday())] 0 *)
         else 
-          schedule_record global_state prog false false false true
+          schedule_record global_state prog false false false false
       end
      else if (List.length global_state.records > 0) then
-      schedule_record global_state prog false false false true
-     done; *)
+      schedule_record global_state prog false false false false
+     done;
 
-  (* bootlegged_sync_exec global_state prog false false false true; *)
+  bootlegged_sync_exec global_state prog false false false false;
 
   let oc = open_out intermediate_output in
   Printf.fprintf oc "ClientID,Kind,Action,Node,Payload,Value\n";
