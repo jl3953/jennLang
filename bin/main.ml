@@ -212,29 +212,31 @@ let process_program (prog : prog) : program =
 
 let sync_exec (global_state : state) (prog : program) 
     (randomly_drop_msgs : bool) 
-    (partition_away_node_one : bool)
     (cut_tail_from_mid : bool)
-    (sever_all_to_tail_but_mid : bool) : unit = 
+    (sever_all_to_tail_but_mid : bool) 
+    (partition_away_nodes : int list) 
+  : unit =
   while not ((List.length global_state.records) = 0) do
     schedule_record global_state prog 
       randomly_drop_msgs 
-      partition_away_node_one 
       cut_tail_from_mid
       sever_all_to_tail_but_mid
+      partition_away_nodes
   done
 
 let bootlegged_sync_exec (global_state : state) (prog : program) 
     (randomly_drop_msgs: bool) 
-    (partition_away_node : bool) 
     (cut_tail_from_mid : bool)
-    (sever_all_to_tail_but_mid : bool): unit = 
+    (sever_all_to_tail_but_mid : bool)
+    (partition_away_nodes : int list)
+  : unit = 
   for _ = 0 to 100000 do
     if not ((List.length global_state.records) = 0) then
-    schedule_record global_state prog 
-      randomly_drop_msgs 
-      partition_away_node 
-      cut_tail_from_mid
-      sever_all_to_tail_but_mid
+      schedule_record global_state prog 
+        randomly_drop_msgs 
+        cut_tail_from_mid
+        sever_all_to_tail_but_mid
+        partition_away_nodes
   done
 
 let parse_file (filename : string) : prog =
@@ -259,7 +261,7 @@ let init_topology (topology : string) (global_state : state) (prog : program) : 
       ; VNode tail_idx
       ; VNode i
       ; VMap (data ())] 0;
-      sync_exec global_state prog false false false false;
+      sync_exec global_state prog false false false [];
       (* Hashtbl.iter (fun _ _ -> print_endline "+1") data; *)
       print_endline "init mid";
     done;
@@ -276,7 +278,7 @@ let init_topology (topology : string) (global_state : state) (prog : program) : 
     ; VMap (data ())] 0;
     print_endline "init head";
     (* Hashtbl.iter (fun _ _ -> print_endline "+1") data; *)
-    sync_exec global_state prog false false false false;
+    sync_exec global_state prog false false false [];
     schedule_client global_state prog "init" [
       VNode tail_idx (* dest *)
     ; VString "Tail" (* name *)
@@ -290,7 +292,7 @@ let init_topology (topology : string) (global_state : state) (prog : program) : 
     ; VMap (data ())] 0;
     print_endline "init tail";
     (* Hashtbl.iter (fun _ _ -> print_endline "+1") data; *)
-    sync_exec global_state prog false false false false;
+    sync_exec global_state prog false false false [];
   | "STAR" -> raise (Failure "Not implemented STAR topology")
   | "RING" -> raise (Failure "Not implemented RING topology")
   | "FULL" -> raise (Failure "Not implemented FULL topology")
@@ -340,7 +342,7 @@ let interp (spec : string) (intermediate_output : string) : unit =
   init_topology topology global_state prog;
 
   schedule_client global_state prog "write" [VNode 0; VString "birthday"; VInt (increment_birthday())] 0;
-  sync_exec global_state prog false false false false;
+  sync_exec global_state prog false false false [];
   print_endline "wrote 215";
 
   (* schedule_client global_state prog "write" [VNode 0; VString "birthday"; VInt (increment_birthday())] 0; *)
@@ -351,8 +353,9 @@ let interp (spec : string) (intermediate_output : string) : unit =
   (* bootlegged_sync_exec global_state prog false false false true; *)
   (* sync_exec global_state prog false false false true; *)
 
-  for _ = 0 to 500 do
-     if (List.length global_state.free_clients > 0) then 
+  let limit = 500 in
+  for i = 0 to limit do
+    if (List.length global_state.free_clients > 0) then 
       begin
         let choose_client_threshold = chain_len + 1 in (* possible reads + a possible write *)
         let random_int = Random.self_init(); Random.int (List.length global_state.records + choose_client_threshold) in
@@ -364,13 +367,27 @@ let interp (spec : string) (intermediate_output : string) : unit =
           schedule_client global_state prog "read" [VNode read_node; VString "birthday"] 0
           (* schedule_client global_state prog "write" [VNode 0; VString "birthday"; VInt (increment_birthday())] 0 *)
         else 
-          schedule_record global_state prog false false false false
+          begin
+            if i < limit / 3 then 
+              schedule_record global_state prog false false false []
+            else if i < limit / 3 * 2 then
+              schedule_record global_state prog false false false [4;5;6]
+            else
+              schedule_record global_state prog false false false []
+          end
       end
-     else if (List.length global_state.records > 0) then
-      schedule_record global_state prog false false false false
-     done;
+    else if (List.length global_state.records > 0) then
+      begin
+        if i < limit / 3 then 
+          schedule_record global_state prog false false false []
+        else if i < limit / 3 * 2 then
+          schedule_record global_state prog false false false [4;5;6]
+        else
+          schedule_record global_state prog false false false []
+      end
+  done;
 
-  bootlegged_sync_exec global_state prog false false false false;
+  bootlegged_sync_exec global_state prog false false false [];
 
   let oc = open_out intermediate_output in
   Printf.fprintf oc "ClientID,Kind,Action,Node,Payload,Value\n";

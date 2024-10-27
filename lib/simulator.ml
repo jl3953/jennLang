@@ -424,13 +424,13 @@ let exec (state : state) (program : program) (record : record)  =
 
 let schedule_record (state : state) (program : program) 
     (randomly_drop_msgs: bool) 
-    (partition_away_node: bool) 
     (cut_tail_from_mid : bool)
     (sever_all_but_mid : bool)
+    (partition_away_nodes : int list)
   : unit =
   begin
     if false then
-      Printf.printf "%b %b %b %b\n" randomly_drop_msgs partition_away_node cut_tail_from_mid sever_all_but_mid;
+      Printf.printf "%b %b %b %b\n" randomly_drop_msgs cut_tail_from_mid sever_all_but_mid (List.is_empty partition_away_nodes);
   end;
   let rec pick n before after =
     match after with
@@ -448,6 +448,8 @@ let schedule_record (state : state) (program : program)
                 let node_id = match eval env node with 
                   | VNode n_id -> n_id
                   | _ -> failwith "Type error!" in
+                let src_node = r.node in
+                let dest_node = node_id in
                 let should_execute = ref true in
                 begin
                   if randomly_drop_msgs && (Random.self_init(); Random.float 1.0 < 0.3) then
@@ -457,15 +459,6 @@ let schedule_record (state : state) (program : program)
                     end
                 end;
                 begin
-                  if partition_away_node && node_id == 1 then
-                    begin
-                      Printf.printf "partition off msgs to node %d func %s\n" node_id f;
-                      should_execute := false
-                    end
-                end;
-                begin
-                  let src_node = r.node in
-                  let dest_node = node_id in
                   if cut_tail_from_mid && (
                       (src_node = 2 && dest_node = 1) || (dest_node = 2 && src_node = 1)) then
                     begin
@@ -474,8 +467,6 @@ let schedule_record (state : state) (program : program)
                     end
                 end;
                 begin
-                  let src_node = r.node in
-                  let dest_node = node_id in
                   if Printf.printf "should sever all but mid? %b\n" sever_all_but_mid; sever_all_but_mid then
                     begin
                       if dest_node = 2 && not (src_node = 1) then
@@ -488,6 +479,15 @@ let schedule_record (state : state) (program : program)
                           Printf.printf "sever all msgs from tail except from mid. srcnode %d destnode %d %s\n" src_node dest_node f;
                           should_execute := false
                         end
+                    end
+                end;
+                begin
+                  if List.mem src_node partition_away_nodes || 
+                     List.mem dest_node partition_away_nodes then
+                    begin
+                      Printf.printf "partition away msgs from node %d to %d func %s\n" 
+                        src_node dest_node f;
+                      should_execute := false
                     end
                 end;
                 begin
