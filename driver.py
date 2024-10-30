@@ -28,13 +28,13 @@ def main():
         intermediate_file = "output_dump/{1}_{0}.csv".format(args.intermediate_file, dt) 
         linearizability_dump = "output_dump/{0}_lin_dump.txt".format(dt)
         cmd = "dune exec _build/default/bin/main.exe {0} {1}".format(args.spec, intermediate_file)
-        print(cmd)
+        # print(cmd)
         with open(interpreter_dump, "w") as outfile:
             print("interpreter_dump", interpreter_dump)
             subprocess.run(cmd.split(), stdout=outfile)
 
         cmd = "python3 main.py {0}".format(intermediate_file)
-        print(cmd)
+        # print(cmd)
         with open(linearizability_dump, "w") as outfile:
             if subprocess.run(cmd.split(), stdout=outfile).returncode != 0:
                 print("Failed on " + intermediate_file)
