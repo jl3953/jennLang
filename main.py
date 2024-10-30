@@ -100,6 +100,7 @@ class ConstraintsGenerator:
 
         proc2Op = {}  # maps process to operation
         for i in range(len(actions)):
+            print("i", i)
             timestamp = i
             action = actions[timestamp]
             if action.call == CallType.INV:
@@ -131,6 +132,38 @@ class ConstraintsGenerator:
 
                     if k.resp < op.inv:
                         self.predecessors[op].add(k)
+        
+        # take care of operations that have invocations but not responses
+        print(len(proc2Op))
+        i = len(actions)
+        for proc, op in proc2Op.items():
+
+            print("proc", proc, "op", op)
+            # a schedule with open reads is equivalent to the schedule 
+            # with the open reads removed.
+            if op.cmd == Command.READ:
+                continue
+
+            timestamp = i
+            i = i + 1
+            if op.cmd == Command.WRITE:
+                op.set_resp(timestamp)  
+            
+            self.successors[op] = set()
+            for k in self.successors.keys():
+                if k == op:
+                    continue
+                
+                if k.resp < op.inv:
+                    self.successors[k].add(op)
+
+            self.predecessors[op] = set()
+            for k in self.predecessors.keys():
+                if k == op:
+                    continue
+
+                if k.resp < op.inv:
+                    self.predecessors[op].add(k)
 
     def match_read(self, read_op, ops):
         """
@@ -198,11 +231,6 @@ class ConstraintsGenerator:
             if op.cmd == Command.READ:
                 self.order_concurrent_writes(op, succs)
 
-    # def no_intervening_writes(self):
-    #     for read_op, write_op in self.matches.items():
-    #         for op in self.successors.keys():
-    #             if op.cmd is Command.WRITE:
-
     def generate_constraints(self, actions):
 
         self.enforce_realtime_order(actions)
@@ -210,11 +238,6 @@ class ConstraintsGenerator:
         if self.alreadyUNSAT:
             return False
         return True
-        # self.concurrent_writes_ordered_by_reads()
-        # self.no_intervening_writes()
-        # if self.alreadyUNSAT:
-        #     return False
-        # return True
 
 
 def z3solver(cg):
@@ -306,45 +329,9 @@ def main():
     parser.add_argument("intermediate_file", type=str)
     args = parser.parse_args()
 
-    actions = [
-        Action("a", CallType.INV, Command.WRITE, k=14, val=1),
-        Action("b", CallType.INV, Command.WRITE, k=14, val=2),
-        Action("a", CallType.RESP, Command.OK),
-        Action("c", CallType.INV, Command.READ, k=14),
-        Action("b", CallType.RESP, Command.OK),
-        Action("c", CallType.RESP, Command.OK, val=2),
-        Action("c", CallType.INV, Command.READ, k=14),
-        Action("c", CallType.RESP, Command.OK, val=1),
-        # Action("x", CallType.INV, Command.READ, k=16),
-        # Action("x", CallType.RESP, Command.OK, val=5),
-    ]
-    # actions = [
-    #     Action("a", CallType.INV, Command.WRITE, k=14, val=1),
-    #     Action("b", CallType.INV, Command.WRITE, k=15, val=1),
-    #     Action("a", CallType.RESP, Command.OK),
-    #     Action("b", CallType.RESP, Command.OK),
-    #     Action("a", CallType.INV, Command.READ, k=14),
-    #     Action("b", CallType.INV, Command.READ, k=15),
-    #     Action("a", CallType.RESP, Command.OK, val=1),
-    #     Action("b", CallType.RESP, Command.OK, val=1),
-    # ]
-
     outfile = args.intermediate_file
     actions = parseTrace(outfile)
-    # actions = [
-    #     Action("x", CallType.INV, Command.READ, k=14),
-    #     Action("a", CallType.INV, Command.WRITE, k=14, val=1),
-    #     Action("b", CallType.INV, Command.WRITE, k=14, val=2),
-    #     Action("c", CallType.INV, Command.WRITE, k=14, val=3),
-    #     Action("x", CallType.RESP, Command.OK, val=3),
-    #     Action("x", CallType.INV, Command.READ, k=14),
-    #     Action("x", CallType.RESP, Command.OK, val=2),
-    #     Action("x", CallType.INV, Command.READ, k=14),
-    #     Action("a", CallType.RESP, Command.OK),
-    #     Action("b", CallType.RESP, Command.OK),
-    #     Action("c", CallType.RESP, Command.OK),
-    #     Action("x", CallType.RESP, Command.OK, val=1)
-    # ]
+
     cg = ConstraintsGenerator()
     if cg.generate_constraints(actions):
         print(cg)

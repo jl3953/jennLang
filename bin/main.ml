@@ -5,9 +5,9 @@ open Mylib.Simulator
 (*Parametrize first*)
 (* TOPOLOGIES = ["LINEAR"; "STAR"; "RING"; "FULL"] *)
 
-let num_servers = 7
+let num_servers = 3
 let num_clients = 7
-let chain_len = 7
+let chain_len = 3
 let head_idx = 0
 let tail_idx = chain_len - 1
 let topology = "LINEAR"
@@ -369,25 +369,25 @@ let interp (spec : string) (intermediate_output : string) : unit =
         else 
           begin
             if i < limit / 3 then 
-              schedule_record global_state prog false false false []
+              schedule_record global_state prog false false false [2]
             else if i < limit / 3 * 2 then
-              schedule_record global_state prog false false false [4;5;6]
+              schedule_record global_state prog false false false [2]
             else
-              schedule_record global_state prog false false false []
+              schedule_record global_state prog false false false [2]
           end
       end
     else if (List.length global_state.records > 0) then
       begin
         if i < limit / 3 then 
-          schedule_record global_state prog false false false []
+          schedule_record global_state prog false false false [2]
         else if i < limit / 3 * 2 then
-          schedule_record global_state prog false false false [4;5;6]
+          schedule_record global_state prog false false false [2]
         else
-          schedule_record global_state prog false false false []
+          schedule_record global_state prog false false false [2]
       end
   done;
 
-  bootlegged_sync_exec global_state prog false false false [];
+  bootlegged_sync_exec global_state prog false false false [2];
 
   let oc = open_out intermediate_output in
   Printf.fprintf oc "ClientID,Kind,Action,Node,Payload,Value\n";

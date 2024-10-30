@@ -36,7 +36,7 @@ def main():
         cmd = "python3 main.py {0}".format(intermediate_file)
         print(cmd)
         with open(linearizability_dump, "w") as outfile:
-            if subprocess.run(cmd.split(), stdout=outfile) != 0:
+            if subprocess.run(cmd.split(), stdout=outfile).returncode != 0:
                 print("Failed on " + intermediate_file)
                 fails = fails + 1 
             else:
