@@ -141,7 +141,10 @@ type record =
                                     For RPCs, this writes to the associate future;
                                     For client operations it appends to the history *)
   ; env : value Env.t 
-  ; id : int }
+  ; id : int 
+  ; mutable x : float (* threshold for being chosen to be executed, when scheduler is implementing a delay. *)
+  ; f : float -> float (* updates x every time this record is not chosen *)
+  }
 
 type op_kind = Invocation | Response
 
@@ -314,7 +317,9 @@ let exec (state : state) (program : program) (record : record)  =
                 ; pc = entry
                 ; continuation = (fun value -> new_future := Some value)
                 ; env = new_env
-                ; id = record.id}
+                ; id = record.id
+                ; x = record.x
+                ; f = record.f }
               in
               store lhs (VFuture new_future) env
             ; state.records <- new_record::state.records
@@ -339,7 +344,9 @@ let exec (state : state) (program : program) (record : record)  =
                     ; pc = entry
                     ; continuation = (fun value -> new_future := Some value)
                     ; env = new_env 
-                    ; id = record.id}
+                    ; id = record.id
+                    ; x = record.x
+                    ; f = record.f }
                   in
                   store lhs (VFuture new_future) env
                 ; state.records <- new_record::state.records
@@ -427,6 +434,7 @@ let schedule_record (state : state) (program : program)
     (cut_tail_from_mid : bool)
     (sever_all_but_mid : bool)
     (partition_away_nodes : int list)
+    (randomly_delay_msgs : bool)
   : unit =
   begin
     if false then
@@ -491,6 +499,16 @@ let schedule_record (state : state) (program : program)
                     end
                 end;
                 begin
+                  if Printf.printf "randomly delay msgs %b\n" randomly_delay_msgs; randomly_delay_msgs then
+                    begin
+                      if Random.self_init(); Random.float 1.0 < r.x then
+                        begin
+                          r.x <- r.f r.x;
+                          should_execute := false
+                        end 
+                    end
+                end;
+                begin
                   if !should_execute then
                     exec state program r
                 end
@@ -551,7 +569,9 @@ let schedule_client (state : state) (program : program) (func_name : string) (ac
           ; node = c
           ; continuation = continuation
           ; env = env 
-          ; id = unique_id }
+          ; id = unique_id
+          ; x = 1.0
+          ; f = (fun x -> x) }
         in
         state.free_clients <- List.rev_append before cs;
         DA.add state.history invocation;

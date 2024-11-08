@@ -294,9 +294,8 @@ def parseTrace(outfile):
     with open(outfile, "r") as csvfile:
         reader = csv.DictReader(csvfile)
         for row in reader:
-            if "init" in row["Action"]:
-                continue
-            elif "triggerFailover" in row["Action"]:
+
+            if row["Action"] in ["init", "triggerFailover", "endFailover"]:
                 continue
 
             action = Action(

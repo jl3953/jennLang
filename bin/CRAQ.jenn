@@ -10,8 +10,12 @@ Node {
     int head = 0;
     int tail = 0;
     int self = 0;
+    bool inFailover = false;
 
     func Read(key) -> Value {
+        if (inFailover == true) {
+            await inFailover == false;
+        }
         if ((role == "Head") || (role == "Mid")) {
             if (!is_committed[key]) {
                 return rpc_call(tail, Read(key));
@@ -24,6 +28,9 @@ Node {
     }
 
     func Write(key, value) -> none {
+        if (inFailover == true) {
+            await inFailover == false;
+        }
         if (role == "Head") {
             if (is_committed[key] == false) {
                 await is_committed[key] == true;
@@ -46,13 +53,16 @@ Node {
         }
     }
     
-
     func AckWrite(key, value) -> none {
+        if (inFailover == true) {
+            await inFailover == false;
+        }
         // check version
         is_committed[key] = true;
     }
     
     func TriggerFailover(failed_node,new_tail) -> none {
+        inFailover = true;
         if (failed_node == successor) {
             successor = succ_successor;
             dirty_logs = {};
@@ -82,6 +92,10 @@ Node {
         }
     }
 
+    func EndFailover() -> none {
+        inFailover = false;
+    }
+
     func Init(assigned_role, pred, pred_pred, succ, succ_succ, h, t, s, data) -> none {
         role = assigned_role;
         predecessor = pred;
@@ -94,6 +108,7 @@ Node {
         is_committed = {};
         //versions = {};
         self = s;
+        inFailover = false;
 
         for (key, value in data) {
             temp = 1;
@@ -111,6 +126,7 @@ Node {
             if ((value != db[key]) && (true == is_committed[key])) {
                 db[key] = value;
                 if ("Tail" != role) {
+                    is_committed[key] = false;
                     rpc_async_call(successor, Write(key, value));
                 }
             }
@@ -153,6 +169,10 @@ ClientInterface {
     // don't trigger more than f of f+1
 	func triggerFailover(dest, failed_node, new_tail) -> none {
         rpc_call(dest, TriggerFailover(failed_node, new_tail));
+    }
+
+    func endFailover(dest) -> none {
+        rpc_call(dest, EndFailover());
     }
 
     /*func init_head(dest, succ, t, data) -> none {

@@ -1,13 +1,32 @@
 open Mylib.Ast
 open Mylib
 open Mylib.Simulator
+open Yojson.Basic.Util
+
+type config = {
+  randomly_drop_msgs: bool;
+  cut_tail_from_mid: bool;
+  sever_all_to_tail_but_mid: bool;
+  partition_away_nodes: int list;
+  randomly_delay_msgs: bool;
+}
+
+let read_config_file (filename: string) : config =
+  let json = Yojson.Basic.from_file filename in
+  {
+    randomly_drop_msgs = json |> member "randomly_drop_msgs" |> to_bool;
+    cut_tail_from_mid = json |> member "cut_tail_from_mid" |> to_bool;
+    sever_all_to_tail_but_mid = json |> member "sever_all_to_tail_but_mid" |> to_bool;
+    partition_away_nodes = json |> member "partition_away_nodes" |> to_list |> filter_int;
+    randomly_delay_msgs = json |> member "randomly_delay_msgs" |> to_bool;
+  }
 
 (*Parametrize first*)
 (* TOPOLOGIES = ["LINEAR"; "STAR"; "RING"; "FULL"] *)
 
-let num_servers = 3
-let num_clients = 7
-let chain_len = 3
+let num_servers = 7
+let num_clients = 14
+let chain_len = 6
 let head_idx = 0
 let tail_idx = chain_len - 1
 let topology = "LINEAR"
@@ -215,6 +234,7 @@ let sync_exec (global_state : state) (prog : program)
     (cut_tail_from_mid : bool)
     (sever_all_to_tail_but_mid : bool) 
     (partition_away_nodes : int list) 
+    (randomly_delay_msgs : bool)
   : unit =
   while not ((List.length global_state.records) = 0) do
     schedule_record global_state prog 
@@ -222,6 +242,7 @@ let sync_exec (global_state : state) (prog : program)
       cut_tail_from_mid
       sever_all_to_tail_but_mid
       partition_away_nodes
+      randomly_delay_msgs
   done
 
 let bootlegged_sync_exec (global_state : state) (prog : program) 
@@ -229,6 +250,7 @@ let bootlegged_sync_exec (global_state : state) (prog : program)
     (cut_tail_from_mid : bool)
     (sever_all_to_tail_but_mid : bool)
     (partition_away_nodes : int list)
+    (randomly_delay_msgs : bool)
   : unit = 
   for _ = 0 to 100000 do
     if not ((List.length global_state.records) = 0) then
@@ -237,6 +259,7 @@ let bootlegged_sync_exec (global_state : state) (prog : program)
         cut_tail_from_mid
         sever_all_to_tail_but_mid
         partition_away_nodes
+        randomly_delay_msgs
   done
 
 let parse_file (filename : string) : prog =
@@ -261,7 +284,7 @@ let init_topology (topology : string) (global_state : state) (prog : program) : 
       ; VNode tail_idx
       ; VNode i
       ; VMap (data ())] 0;
-      sync_exec global_state prog false false false [];
+      sync_exec global_state prog false false false [] false;
       (* Hashtbl.iter (fun _ _ -> print_endline "+1") data; *)
       print_endline "init mid";
     done;
@@ -278,7 +301,7 @@ let init_topology (topology : string) (global_state : state) (prog : program) : 
     ; VMap (data ())] 0;
     print_endline "init head";
     (* Hashtbl.iter (fun _ _ -> print_endline "+1") data; *)
-    sync_exec global_state prog false false false [];
+    sync_exec global_state prog false false false [] false;
     schedule_client global_state prog "init" [
       VNode tail_idx (* dest *)
     ; VString "Tail" (* name *)
@@ -292,7 +315,7 @@ let init_topology (topology : string) (global_state : state) (prog : program) : 
     ; VMap (data ())] 0;
     print_endline "init tail";
     (* Hashtbl.iter (fun _ _ -> print_endline "+1") data; *)
-    sync_exec global_state prog false false false [];
+    sync_exec global_state prog false false false [] false;
   | "STAR" -> raise (Failure "Not implemented STAR topology")
   | "RING" -> raise (Failure "Not implemented RING topology")
   | "FULL" -> raise (Failure "Not implemented FULL topology")
@@ -333,7 +356,15 @@ let print_global_nodes (nodes : (value Env.t) array) =
       print_endline "";
     ) nodes
 
-let interp (spec : string) (intermediate_output : string) : unit =
+let interp (spec : string) (intermediate_output : string) (scheduler_config_json : string) : unit =
+
+  let config = read_config_file scheduler_config_json in
+  let randomly_drop_msgs = config.randomly_drop_msgs in
+  let cut_tail_from_mid = config.cut_tail_from_mid in
+  let sever_all_to_tail_but_mid = config.sever_all_to_tail_but_mid in
+  let partition_away_nodes = config.partition_away_nodes in
+  let randomly_delay_msgs = config.randomly_delay_msgs in
+
   (* Load the program into the simulator *)
   let _ = parse_file spec in ();
   let prog = 
@@ -342,8 +373,17 @@ let interp (spec : string) (intermediate_output : string) : unit =
   init_topology topology global_state prog;
 
   schedule_client global_state prog "write" [VNode 0; VString "birthday"; VInt (increment_birthday())] 0;
-  sync_exec global_state prog false false false [];
+  sync_exec global_state prog false false false [] false;
   print_endline "wrote 215";
+
+  for node = 0 to chain_len do 
+    schedule_client global_state prog "triggerFailover" [VNode node; VNode 2; VNode 6] 0;
+  done;
+  sync_exec global_state prog false false false [] false;
+  for node = 0 to chain_len do 
+    schedule_client global_state prog "endFailover" [VNode node] 0;
+  done;
+  sync_exec global_state prog false false false [] false;
 
   (* schedule_client global_state prog "write" [VNode 0; VString "birthday"; VInt (increment_birthday())] 0; *)
   (* bootlegged_sync_exec global_state prog false false false true; *)
@@ -362,32 +402,39 @@ let interp (spec : string) (intermediate_output : string) : unit =
         if (random_int == 0) then 
           schedule_client global_state prog "write" [VNode 0; VString "birthday"; VInt (increment_birthday())] 0
         else if (random_int < choose_client_threshold) then
-          let read_node = Random.self_init(); Random.int chain_len in
+          let read_node = Random.self_init(); List.nth [0; 1; 3; 4; 5; 6] (Random.int chain_len) in
           Printf.printf "Reading from node %d\n" read_node;
           schedule_client global_state prog "read" [VNode read_node; VString "birthday"] 0
           (* schedule_client global_state prog "write" [VNode 0; VString "birthday"; VInt (increment_birthday())] 0 *)
         else 
           begin
             if i < limit / 3 then 
-              schedule_record global_state prog false false false [2]
+              schedule_record global_state prog 
+                randomly_drop_msgs cut_tail_from_mid sever_all_to_tail_but_mid partition_away_nodes randomly_delay_msgs
             else if i < limit / 3 * 2 then
-              schedule_record global_state prog false false false [2]
+              schedule_record global_state prog
+                randomly_drop_msgs cut_tail_from_mid sever_all_to_tail_but_mid partition_away_nodes randomly_delay_msgs
             else
-              schedule_record global_state prog false false false [2]
+              schedule_record global_state prog
+                randomly_drop_msgs cut_tail_from_mid sever_all_to_tail_but_mid partition_away_nodes randomly_delay_msgs
           end
       end
     else if (List.length global_state.records > 0) then
       begin
         if i < limit / 3 then 
-          schedule_record global_state prog false false false [2]
+          schedule_record global_state prog 
+            randomly_drop_msgs cut_tail_from_mid sever_all_to_tail_but_mid partition_away_nodes randomly_delay_msgs
         else if i < limit / 3 * 2 then
-          schedule_record global_state prog false false false [2]
+          schedule_record global_state prog
+            randomly_drop_msgs cut_tail_from_mid sever_all_to_tail_but_mid partition_away_nodes randomly_delay_msgs
         else
-          schedule_record global_state prog false false false [2]
+          schedule_record global_state prog 
+            randomly_drop_msgs cut_tail_from_mid sever_all_to_tail_but_mid partition_away_nodes randomly_delay_msgs
       end
   done;
 
-  bootlegged_sync_exec global_state prog false false false [2];
+  bootlegged_sync_exec global_state prog 
+    randomly_drop_msgs cut_tail_from_mid sever_all_to_tail_but_mid partition_away_nodes randomly_delay_msgs;
 
   let oc = open_out intermediate_output in
   Printf.fprintf oc "ClientID,Kind,Action,Node,Payload,Value\n";
@@ -413,23 +460,25 @@ let interp (spec : string) (intermediate_output : string) : unit =
     ) global_state.history;
   print_global_nodes global_state.nodes
 
-let handle_arguments () : string * string = 
-  if Array.length Sys.argv < 3 then
+let handle_arguments () : string * string * string = 
+  if Array.length Sys.argv < 4 then
     begin
-      Printf.printf "Usage: %s <spec> <intermediate_output>\n" Sys.argv.(0);
+      Printf.printf "Usage: %s <spec> <intermediate_output> <scheduler_config.json>\n" Sys.argv.(0);
       exit 1
     end
   else
     begin
       let spec = Sys.argv.(1) in
       let intermediate_output = Sys.argv.(2) in
-      Printf.printf "Input spec: %s, intermediate output %s\n" spec intermediate_output;
-      (spec, intermediate_output)
+      let scheduler_config_json = Sys.argv.(3) in
+      Printf.printf "Input spec: %s, intermediate output: %s, scheduler_config_json: %s\n" 
+        spec intermediate_output scheduler_config_json;
+      (spec, intermediate_output, scheduler_config_json)
     end
 ;;
 
 let () = 
-  let spec, intermediate_output = handle_arguments () in 
-  interp spec intermediate_output;
+  let spec, intermediate_output, scheduler_config_json = handle_arguments () in 
+  interp spec intermediate_output scheduler_config_json;
   print_endline "Program recognized as valid!";
   print_endline "Program ran successfully!"
