@@ -1,0 +1,196 @@
+Node {
+    string role = "";
+    map<Key, Value> db = {};
+    map<Key, bool> is_committed = {};
+    //map<Key, int> versions = {};
+    int predecessor = 0;
+    int pred_predecessor = 0;
+    int successor = 0;
+    int succ_successor = 0;
+    int head = 0;
+    int tail = 0;
+    int self = 0;
+    bool inFailover = false;
+
+    func Read(key) -> Value {
+        if (inFailover == true) {
+            await inFailover == false;
+        }
+        if ((role == "Head") || (role == "Mid")) {
+            if (!is_committed[key]) {
+                return rpc_call(tail, Read(key));
+            } else {
+                return db[key];
+            }
+        } else {
+            return db[key];
+        }
+    }
+
+    func Write(key, value) -> none {
+        if (inFailover == true) {
+            await inFailover == false;
+        }
+        if (role == "Head") {
+            if (is_committed[key] == false) {
+                await is_committed[key] == true;
+            }
+            db[key] = value;
+            is_committed[key] = false;
+            rpc_async_call(successor, Write(key, value));
+            await is_committed[key] == true;
+        } else if (role == "Mid") {
+            db[key] = value;
+            is_committed[key] = false;
+            rpc_async_call(successor, Write(key, value));
+            await is_committed[key] == true;
+            rpc_async_call(predecessor, AckWrite(key, value));
+        } else {
+            // role == "Tail"
+            db[key] = value;
+            is_committed[key] = true;
+            rpc_async_call(predecessor, AckWrite(key, value));
+        }
+    }
+    
+    func AckWrite(key, value) -> none {
+        if (inFailover == true) {
+            await inFailover == false;
+        }
+        // check version
+        is_committed[key] = true;
+    }
+    
+    func TriggerFailover(failed_node, new_head, new_tail) -> none {
+        inFailover = true;
+        if (failed_node == tail) {
+            tail = new_tail;
+            if (self == new_tail) {
+                role = "Tail";
+                
+                // back propapagate writes
+                for (key, value in is_committed) {
+                    if (is_committed[key] == false) {
+                        is_committed[key] = true;
+                        rpc_async_call(predecessor, AckWrite(key, value));
+                    }
+                }
+            }
+        } else if (failed_node == head) {
+            head = new_head;
+            if (self == new_head) {
+                // I think there's nothing else we need to do here.
+                // Clients will just have to retry.
+                role = "Head";
+            }
+        } else {
+            if (failed_node == successor) {
+                successor = succ_successor;
+                dirty_logs = {};
+                for (key, committed in is_committed) {
+                    if (!committed) {
+                        dirty_logs[key] = db[key];
+                    }
+                }
+                rpc_call(successor, PropagateDirtyLogs(dirty_logs));
+            }
+            if (failed_node == predecessor) {
+                predecessor = pred_predecessor;
+                clean_logs = {};
+                for (key, committed in is_committed) {
+                    if (committed) {
+                        clean_logs[key] = db[key];
+                    }
+                }
+                rpc_call(predecessor, BackPropagateCleanLogs(clean_logs));
+            }
+        }
+    }
+
+    func EndFailover() -> none {
+        inFailover = false;
+    }
+
+    func Init(assigned_role, pred, pred_pred, succ, succ_succ, h, t, s, data) -> none {
+        role = assigned_role;
+        predecessor = pred;
+        pred_predecessor = pred_pred;
+        successor = succ;
+        succ_successor = succ_succ;
+        head = h;
+        tail = t;
+        db = {};
+        is_committed = {};
+        //versions = {};
+        self = s;
+        inFailover = false;
+
+        for (key, value in data) {
+            temp = 1;
+            db[key] = value;
+            is_committed[key] = true;
+            //versions[key] = 0;
+        }
+    }
+
+    // Receiving dirty logs
+    func PropagateDirtyLogs(dirty_logs) -> none {
+        diff_dirty_logs = {};
+        for (key, value in dirty_logs) {
+            // previous value is committed, but hasn't seen new version yet.
+            if ((value != db[key]) && (true == is_committed[key])) {
+                db[key] = value;
+                if ("Tail" != role) {
+                    is_committed[key] = false;
+                    rpc_async_call(successor, Write(key, value));
+                }
+            }
+        }
+    }
+
+    func BackPropagateCleanLogs(clean_logs) -> none {
+        diff_clean_logs = {};
+        for (key, value in clean_logs) {
+            if ((value == db[key]) && (false == is_committed[key])) {
+                is_committed[key] = true;
+                if ("Head" != role) {
+                    rpc_async_call(predecessor, AckWrite(key, value));
+                }
+            }
+        }
+    }
+
+    
+    func PropagateLogsToTail(other_db) -> none {
+        role = "Tail";
+        for (key, value in other_db) {
+            db[key] = value;
+        }
+    }
+}
+
+ClientInterface { 
+    
+    func read(dest, key) -> int {
+        val = rpc_call(dest, Read(key));
+        return val;
+    }
+
+    func write(dest, key, val) -> none {
+        //dest = head;
+        rpc_call(dest, Write(key, val));
+    }
+
+    // don't trigger more than f of f+1
+	func triggerFailover(dest, failed_node, new_head, new_tail) -> none {
+        rpc_call(dest, TriggerFailover(failed_node, new_head, new_tail));
+    }
+
+    func endFailover(dest) -> none {
+        rpc_call(dest, EndFailover());
+    }
+
+    func init(dest, name, pred, pred_pred, succ, succ_succ, head, tail, self, data) -> none {
+        rpc_call(dest, Init(name, pred, pred_pred, succ, succ_succ, head, tail, self, data));
+    }
+}

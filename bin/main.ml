@@ -377,7 +377,7 @@ let interp (spec : string) (intermediate_output : string) (scheduler_config_json
   print_endline "wrote 215";
 
   for node = 0 to chain_len do 
-    schedule_client global_state prog "triggerFailover" [VNode node; VNode 2; VNode 6] 0;
+    schedule_client global_state prog "triggerFailover" [VNode node; VNode 0; VNode 1; VNode 5] 0;
   done;
   sync_exec global_state prog false false false [] false;
   for node = 0 to chain_len do 
@@ -402,7 +402,7 @@ let interp (spec : string) (intermediate_output : string) (scheduler_config_json
         if (random_int == 0) then 
           schedule_client global_state prog "write" [VNode 0; VString "birthday"; VInt (increment_birthday())] 0
         else if (random_int < choose_client_threshold) then
-          let read_node = Random.self_init(); List.nth [0; 1; 3; 4; 5; 6] (Random.int chain_len) in
+          let read_node = Random.self_init(); List.nth [1; 2; 3; 4; 5] (Random.int (chain_len-1)) in
           Printf.printf "Reading from node %d\n" read_node;
           schedule_client global_state prog "read" [VNode read_node; VString "birthday"] 0
           (* schedule_client global_state prog "write" [VNode 0; VString "birthday"; VInt (increment_birthday())] 0 *)

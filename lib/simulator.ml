@@ -181,8 +181,6 @@ type program =
   ; rpc : function_info Env.t 
   ; client_ops : function_info Env.t }(* jenndbg why does an RPC handler need a list of function info *)
 
-
-
 let load (var : string) (env : record_env) : value =
   try begin 
     Env.find env.local_env var
@@ -570,8 +568,8 @@ let schedule_client (state : state) (program : program) (func_name : string) (ac
           ; continuation = continuation
           ; env = env 
           ; id = unique_id
-          ; x = 1.0
-          ; f = (fun x -> x) }
+          ; x = 0.4
+          ; f = (fun x -> x /. 2.0) }
         in
         state.free_clients <- List.rev_append before cs;
         DA.add state.history invocation;
