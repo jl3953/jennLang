@@ -13,9 +13,8 @@ Node {
     bool inFailover = false;
 
     func Read(key) -> Value {
-        if (inFailover == true) {
-            await inFailover == false;
-        }
+        await inFailover == false;
+
         if ((role == "Head") || (role == "Mid")) {
             if (!is_committed[key]) {
                 return rpc_call(tail, Read(key));
@@ -28,9 +27,8 @@ Node {
     }
 
     func Write(key, value) -> none {
-        if (inFailover == true) {
-            await inFailover == false;
-        }
+        await inFailover == false;
+
         if (role == "Head") {
             if (is_committed[key] == false) {
                 await is_committed[key] == true;
@@ -54,16 +52,17 @@ Node {
     }
     
     func AckWrite(key, value) -> none {
-        if (inFailover == true) {
-            await inFailover == false;
-        }
+        await inFailover == false;
+
         // check version
         is_committed[key] = true;
     }
     
-    func TriggerFailover(failed_node, new_head, new_tail) -> none {
-        inFailover = true;
-        if (failed_node == tail) {
+    func DeleteNode(deleted_node, new_head, new_tail) -> none {
+
+        await inFailover == true;
+
+        if (deleted_node == tail) {
             tail = new_tail;
             if (self == new_tail) {
                 role = "Tail";
@@ -76,7 +75,7 @@ Node {
                     }
                 }
             }
-        } else if (failed_node == head) {
+        } else if (deleted_node == head) {
             head = new_head;
             if (self == new_head) {
                 // I think there's nothing else we need to do here.
@@ -84,7 +83,7 @@ Node {
                 role = "Head";
             }
         } else {
-            if (failed_node == successor) {
+            if (deleted_node == successor) {
                 successor = succ_successor;
                 dirty_logs = {};
                 for (key, committed in is_committed) {
@@ -94,7 +93,7 @@ Node {
                 }
                 rpc_call(successor, PropagateDirtyLogs(dirty_logs));
             }
-            if (failed_node == predecessor) {
+            if (deleted_node == predecessor) {
                 predecessor = pred_predecessor;
                 clean_logs = {};
                 for (key, committed in is_committed) {
@@ -105,6 +104,10 @@ Node {
                 rpc_call(predecessor, BackPropagateCleanLogs(clean_logs));
             }
         }
+    }
+
+    func StartFailover() -> none {
+        inFailover = true;
     }
 
     func EndFailover() -> none {
@@ -159,12 +162,24 @@ Node {
             }
         }
     }
-
     
     func PropagateLogsToTail(other_db) -> none {
         role = "Tail";
         for (key, value in other_db) {
             db[key] = value;
+        }
+    }
+
+    func AddNode(old_tail, new_node) -> none {
+        await inFailover == true;
+        
+        tail = new_node;
+        
+        if (role == "Tail") {
+            successor = new_node;
+            rpc_call(new_node, PropagateLogsToTail(db));
+        } else if (self == new_node) {
+            predecessor = old_tail;
         }
     }
 }
@@ -182,8 +197,16 @@ ClientInterface {
     }
 
     // don't trigger more than f of f+1
-	func triggerFailover(dest, failed_node, new_head, new_tail) -> none {
-        rpc_call(dest, TriggerFailover(failed_node, new_head, new_tail));
+	func deleteNode(dest, deleted_node, new_head, new_tail) -> none {
+        rpc_call(dest, DeleteNode(deleted_node, new_head, new_tail));
+    }
+
+    func addNode(dest, old_tail, new_node) -> none {
+        rpc_call(dest, AddNode(old_tail, new_node));
+    }
+
+    func startFailover(dest) -> none {
+        rpc_call(dest, StartFailover());
     }
 
     func endFailover(dest) -> none {

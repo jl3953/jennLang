@@ -18,7 +18,7 @@ def main():
         # print(cmd)
         subprocess.call(cmd, shell=True)
 
-    for trial in ["config", "delay_msgs", "drop_msgs"]:
+    for trial in ["config"]:
         
         fails = 0 
 

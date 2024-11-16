@@ -103,6 +103,7 @@ class ConstraintsGenerator:
             print("i", i)
             timestamp = i
             action = actions[timestamp]
+            print("action", action)
             if action.call == CallType.INV:
                 if action.cmd == Command.WRITE:
                     proc2Op[action.proc] = Operation(action.proc, action.cmd, timestamp,
@@ -110,7 +111,9 @@ class ConstraintsGenerator:
                 elif action.cmd == Command.READ:
                     proc2Op[action.proc] = Operation(action.proc, action.cmd, timestamp,
                                                      action.k)
+
             elif action.call == CallType.RESP:
+                print ("action.proc", action.proc)
                 op = proc2Op[action.proc]
                 op.set_resp(timestamp)
                 if op.cmd == Command.READ:
@@ -295,9 +298,6 @@ def parseTrace(outfile):
         reader = csv.DictReader(csvfile)
         for row in reader:
 
-            if row["Action"] in ["init", "triggerFailover", "endFailover"]:
-                continue
-
             action = Action(
                 str(row["ClientID"]),
                 CallType.INV if row["Kind"] == "Invocation" else CallType.RESP,
@@ -316,6 +316,8 @@ def parseTrace(outfile):
             elif action.call == CallType.RESP and "read" in row["Action"]:
                 action.cmd = Command.OK
                 action.val = row["Node"]
+            else:
+                continue
 
             actions.append(action)
             print(action.__str__())

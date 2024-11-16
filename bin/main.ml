@@ -376,8 +376,12 @@ let interp (spec : string) (intermediate_output : string) (scheduler_config_json
   sync_exec global_state prog false false false [] false;
   print_endline "wrote 215";
 
+  for node = 0 to chain_len do
+    schedule_client global_state prog "startFailover" [VNode node] 0;
+  done;
+  sync_exec global_state prog false false false [] false;
   for node = 0 to chain_len do 
-    schedule_client global_state prog "triggerFailover" [VNode node; VNode 0; VNode 1; VNode 5] 0;
+    schedule_client global_state prog "addNode" [VNode node; VNode 5; VNode 6] 0;
   done;
   sync_exec global_state prog false false false [] false;
   for node = 0 to chain_len do 
@@ -393,16 +397,18 @@ let interp (spec : string) (intermediate_output : string) (scheduler_config_json
   (* bootlegged_sync_exec global_state prog false false false true; *)
   (* sync_exec global_state prog false false false true; *)
 
+  let new_chain = [0; 1; 2; 3; 4; 5; 6] in
+  let new_chain_len = List.length new_chain in
   let limit = 500 in
   for i = 0 to limit do
     if (List.length global_state.free_clients > 0) then 
       begin
-        let choose_client_threshold = chain_len + 1 in (* possible reads + a possible write *)
+        let choose_client_threshold = new_chain_len + 1 in (* possible reads + a possible write *)
         let random_int = Random.self_init(); Random.int (List.length global_state.records + choose_client_threshold) in
         if (random_int == 0) then 
           schedule_client global_state prog "write" [VNode 0; VString "birthday"; VInt (increment_birthday())] 0
         else if (random_int < choose_client_threshold) then
-          let read_node = Random.self_init(); List.nth [1; 2; 3; 4; 5] (Random.int (chain_len-1)) in
+          let read_node = Random.self_init(); List.nth new_chain (Random.int (new_chain_len)) in
           Printf.printf "Reading from node %d\n" read_node;
           schedule_client global_state prog "read" [VNode read_node; VString "birthday"] 0
           (* schedule_client global_state prog "write" [VNode 0; VString "birthday"; VInt (increment_birthday())] 0 *)
