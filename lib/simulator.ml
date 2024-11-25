@@ -437,7 +437,7 @@ let schedule_record (state : state) (program : program)
   : unit =
   begin
     if false then
-      Printf.printf "%b %b %b %b\n" randomly_drop_msgs cut_tail_from_mid sever_all_but_mid (List.is_empty partition_away_nodes);
+      Printf.printf "%b %b %b %b\n" randomly_drop_msgs cut_tail_from_mid sever_all_but_mid (List.length partition_away_nodes = 0);
   end;
   let rec pick n before after =
     match after with
