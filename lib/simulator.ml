@@ -25,7 +25,7 @@ module DA = BatDynArray
 
 type expr =
   | EVar of string
-  | EFind of string * expr
+  | EFind of expr * expr
   | EInt of int
   | EBool of bool
   | ENot of expr
@@ -34,7 +34,15 @@ type expr =
   | EEqualsEquals of expr * expr
   | EMap of (string * expr) list
   | EList of expr list
+  | EListPrepend of expr * expr
+  | EListAppend of expr * expr
   | EString of string
+  | ELessThan of expr * expr
+  | ELessThanEquals of expr * expr
+  | EGreaterThan of expr * expr
+  | EGreaterThanEquals of expr * expr
+  | EListLen of expr
+  | EListAccess of expr * int
 [@@deriving ord]
 
 type lhs =
@@ -196,10 +204,28 @@ let rec eval (env : record_env) (expr : expr) : value =
   | EInt i -> VInt i
   | EBool b -> VBool b
   | EVar v -> load v env
-  | EFind (m, k) ->
-    begin match load m env with
-      | VMap map -> Hashtbl.find map (eval env k)
-      | _ -> failwith "EFind eval fail"
+  | EFind (c, k) ->
+    begin match eval env c with
+    | VMap map -> Hashtbl.find map (eval env k)
+    | VList l -> 
+      begin match l with 
+        | [] -> failwith "Cannot index into empty list"
+        | _ ->
+          begin match eval env k with 
+          | VInt i -> 
+            if i < 0 || i >= List.length l then 
+              failwith "idx out of range"
+            else
+            List.nth l i
+          | _ -> failwith "Cannot index into a list with non-integer"
+          end
+      end
+    | VString s -> 
+      begin match load s env with
+        | VMap map -> Hashtbl.find map (eval env k)
+        | _ -> failwith "EFind eval fail"
+      end
+    | _ -> failwith "EFind eval fail"
     end
   | ENot e -> 
     begin match eval env e with
@@ -241,7 +267,55 @@ let rec eval (env : record_env) (expr : expr) : value =
         | e :: rest -> (eval env e) :: (makelist rest)
       end in
     VList (makelist exprs)
+  | EListPrepend (item, ls) ->
+    begin match eval env item, eval env ls with
+      | v, VList l -> VList (v :: l)
+      | _ -> failwith "EListPrepend eval fail"
+    end
+  | EListAppend (ls, item) ->
+    begin match eval env ls, eval env item with
+      | VList l, v -> VList (l @ [v])
+      | _ -> failwith "EListAppend eval fail"
+    end
   | EString s -> VString s
+  | ELessThan (e1, e2) ->
+    begin match eval env e1, eval env e2 with
+      | VInt i1, VInt i2 -> VBool (i1 < i2)
+      | _ -> failwith "ELessThan eval fail"
+    end
+  | ELessThanEquals (e1, e2) ->
+    begin match eval env e1, eval env e2 with
+      | VInt i1, VInt i2 -> VBool (i1 <= i2)
+      | _ -> failwith "ELessThanEquals eval fail"
+    end
+  | EGreaterThan (e1, e2) ->
+    begin match eval env e1, eval env e2 with
+      | VInt i1, VInt i2 -> VBool (i1 > i2)
+      | _ -> failwith "EGreaterThan eval fail"
+    end
+  | EGreaterThanEquals (e1, e2) ->
+    begin match eval env e1, eval env e2 with
+      | VInt i1, VInt i2 -> VBool (i1 >= i2)
+      | _ -> failwith "EGreaterThanEquals eval fail"
+    end
+  | EListLen e ->
+    begin match eval env e with
+      | VList l -> VInt (List.length l)
+      | _ -> failwith "Can't get length of non-list data structure"
+    end
+  | EListAccess (ls, idx) ->
+    begin match eval env ls with
+      | VList l -> 
+        begin match l with 
+          | [] -> failwith "EListAccess eval fail on empty list"
+          | _ ->
+            if List.length l <= idx || idx < 0 then 
+              failwith "idx out of range"
+            else
+              List.nth l idx
+        end
+      | _ -> failwith "Can't index into something that isn't a list"
+    end
 
 let rec eval_lhs (env : record_env) (lhs : lhs) : lvalue =
   match lhs with

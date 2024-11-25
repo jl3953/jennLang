@@ -17,10 +17,16 @@ type boolean =
 | Or of rhs * rhs
 | EqualsEquals of rhs * rhs
 | NotEquals of rhs * rhs
+| LessThan of rhs * rhs
+| LessThanEquals of rhs * rhs
+| GreaterThan of rhs * rhs
+| GreaterThanEquals of rhs * rhs
+
+and collection_access = CollectionAccess of rhs * rhs
 
 and rhs = 
   | VarRHS of string
-  | MapAccessRHS of string * string
+  | CollectionAccessRHS of collection_access
   | FuncCallRHS of func_call
   | LiteralRHS of literal 
   | FieldAccessRHS of rhs * string
@@ -30,7 +36,7 @@ and rhs =
   | Head of rhs
   | Tail of rhs
   | Len of rhs
-  | ListAccess of rhs * rhs
+  | ListAccess of rhs * int
 
 and collection = 
   | MapLit of (string * rhs) list
@@ -53,7 +59,7 @@ and rpc_call =
 
 and lhs = 
   | VarLHS of string
-  | MapAccessLHS of string * string
+  | CollectionAccessLHS of collection_access 
   | FieldAccessLHS of rhs * string
   | TupleLHS of string list
 
@@ -65,6 +71,7 @@ and statement =
   | Assignment of lhs * rhs
   | Expr of rhs
   | Return of rhs
+  | ForLoop of statement * rhs * statement * statement list
   | ForLoopIn of lhs * rhs * statement list
   | Comment
   | Await of rhs

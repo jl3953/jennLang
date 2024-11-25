@@ -23,14 +23,17 @@
 %token IF ELSEIF ELSE
 %token IN
 %token LEFT_ANGLE_BRACKET RIGHT_ANGLE_BRACKET
+%token LEFT_ANGLE_BRACKET_EQUALS RIGHT_ANGLE_BRACKET_EQUALS
 %token LEFT_CURLY_BRACE RIGHT_CURLY_BRACE 
 %token LEFT_PAREN RIGHT_PAREN 
 %token LEFT_SQUARE_BRACKET RIGHT_SQUARE_BRACKET
 %token LEN
 %token MAP
+%token MINUS
 %token NOT_EQUALS
 %token OPTIONS
 %token OR
+%token PLUS
 %token PREPEND
 %token RETURN
 %token RPC_ASYNC_CALL
@@ -40,10 +43,12 @@
 %token QUOTE
 %token EOF
 
+%left LEFT_SQUARE_BRACKET
 %left BANG
 %left AND
 %left OR
-%nonassoc EQUALS_EQUALS NOT_EQUALS
+// %left PLUS MINUS
+%nonassoc EQUALS_EQUALS NOT_EQUALS LEFT_ANGLE_BRACKET RIGHT_ANGLE_BRACKET LEFT_ANGLE_BRACKET_EQUALS RIGHT_ANGLE_BRACKET_EQUALS
 // %left COMMA
 
 %type <Ast.prog> program
@@ -156,6 +161,10 @@ collection:
     { MapLit(kvs) }
   | l = list_lit
     { l}
+
+collection_access:
+  | collection_type = right_side LEFT_SQUARE_BRACKET key = right_side RIGHT_SQUARE_BRACKET
+    { CollectionAccess(collection_type, key) }
   
 literals:
   | OPTIONS LEFT_PAREN opts = options RIGHT_PAREN
@@ -164,8 +173,20 @@ literals:
     { String(s) }
   | QUOTE QUOTE
     { String("") }
+  | i = integer
+    { i }
+
+integer:
   | i = INT
     { Int(i) }
+  | i1 = INT PLUS i2 = INT
+    { Int(i1 + i2) }  
+  | i1 = INT MINUS i2 = INT
+    { Int(i1 - i2) }
+  // | i = INT PLUS PLUS
+  //   { Int(i + 1) }
+  // | i = INT MINUS MINUS
+  //   { Int(i - 1) }
 
 var_init:
   | typ = type_def id = ID EQUALS right_side = right_side
@@ -186,8 +207,8 @@ l_items:
 left_side:
   | id = ID
     { VarLHS(id) }
-  | mapName = ID LEFT_SQUARE_BRACKET key = ID RIGHT_SQUARE_BRACKET
-    { MapAccessLHS(mapName, key) }
+  | ca = collection_access
+    { CollectionAccessLHS(ca) }
   // | rhs = right_side DOT key = ID
   //   { FieldAccessLHS(rhs, key) } 
   | l_items = l_items
@@ -209,9 +230,16 @@ boolean:
     { EqualsEquals (rhs1, rhs2)}
   | rhs1 = right_side NOT_EQUALS rhs2 = right_side
     { NotEquals (rhs1, rhs2)}
+  | rhs1 = right_side LEFT_ANGLE_BRACKET rhs2 = right_side
+    { LessThan (rhs1, rhs2)}
+  | rhs1 = right_side LEFT_ANGLE_BRACKET_EQUALS rhs2 = right_side
+    { LessThanEquals (rhs1, rhs2)}
+  | rhs1 = right_side RIGHT_ANGLE_BRACKET rhs2 = right_side
+    { GreaterThan (rhs1, rhs2)}
+  | rhs1 = right_side RIGHT_ANGLE_BRACKET_EQUALS rhs2 = right_side
+    { GreaterThanEquals (rhs1, rhs2)}
   | LEFT_PAREN b = boolean RIGHT_PAREN
     { b }
-
 
 list_lit:
   | LEFT_SQUARE_BRACKET RIGHT_SQUARE_BRACKET
@@ -234,8 +262,12 @@ list_ops:
 right_side:
   | id = ID
     { VarRHS(id) }
-  | mapName = ID LEFT_SQUARE_BRACKET key = ID RIGHT_SQUARE_BRACKET
-    { MapAccessRHS(mapName, key) }
+  // | mapName = ID LEFT_SQUARE_BRACKET key = ID RIGHT_SQUARE_BRACKET
+  //   { MapAccessRHS(mapName, key) }
+  // | ls = right_side LEFT_SQUARE_BRACKET idx = INT RIGHT_SQUARE_BRACKET
+  //   { ListAccess(ls, idx) }
+  | ca = collection_access
+    { CollectionAccessRHS(ca) } 
   | func_call = func_call
     { FuncCallRHS(func_call)}
   | literal = literals
@@ -260,6 +292,12 @@ statement:
     { Expr(r) }
   | RETURN r = right_side SEMICOLON
     { Return(r) }
+  | FOR LEFT_PAREN init = statement SEMICOLON
+    cond = right_side SEMICOLON 
+    progress = statement RIGHT_PAREN LEFT_CURLY_BRACE
+    body = statements
+    RIGHT_CURLY_BRACE
+    { ForLoop(init, cond, progress, body) }
   | FOR LEFT_PAREN idx = left_side IN col = right_side RIGHT_PAREN LEFT_CURLY_BRACE
     body = statements
     RIGHT_CURLY_BRACE

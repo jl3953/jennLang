@@ -54,7 +54,9 @@ and token = parse
   | '=' { EQUALS }
   | integer as i { INT (int_of_string i)}
   | '<' {LEFT_ANGLE_BRACKET}
+  | "<=" {LEFT_ANGLE_BRACKET_EQUALS}
   | '>' {RIGHT_ANGLE_BRACKET}
+  | ">=" {RIGHT_ANGLE_BRACKET_EQUALS}
   | '!' {BANG}
   | '{' {LEFT_CURLY_BRACE}
   | '}' {RIGHT_CURLY_BRACE}
@@ -62,6 +64,8 @@ and token = parse
   | ')' {RIGHT_PAREN}
   | '[' {LEFT_SQUARE_BRACKET}
   | ']' {RIGHT_SQUARE_BRACKET}
+  | '+' {PLUS}
+  | '-' {MINUS}
   (*| '.' {DOT}*)
   | ':' {COLON}
   | ';' {SEMICOLON}

@@ -60,14 +60,14 @@ let global_state =
 let convert_lhs(lhs : Ast.lhs) : Simulator.lhs =
   match lhs with 
   | VarLHS (var_name) -> LVar(var_name)
-  | MapAccessLHS (map_name, key) -> LAccess(LVar(map_name), EVar(key))
+  | CollectionAccessLHS (map_name, key) -> LAccess(LVar(map_name), EVar(key))
   | FieldAccessLHS (_, _) -> failwith "TODO what on earth is FieldAccessLHS again?"
   | TupleLHS lefts -> LTuple lefts
 
 let rec convert_rhs (rhs : rhs) : Simulator.expr =
   match rhs with
   | VarRHS var -> EVar(var)
-  | MapAccessRHS(map, key) -> EFind(map, EVar(key))
+  | CollectionAccess(c, key) -> EFind(convert_rhs c, convert_rhs key)
   | FuncCallRHS func_call ->
     begin match func_call with
       | FuncCall _ -> failwith ("Already implemented FuncCallRHS in top level")
@@ -87,59 +87,23 @@ let rec convert_rhs (rhs : rhs) : Simulator.expr =
       | And (b1, b2) -> EAnd(convert_rhs b1, convert_rhs b2)
       | EqualsEquals (rhs1, rhs2) -> EEqualsEquals(convert_rhs rhs1, convert_rhs rhs2)
       | NotEquals (b1, b2) -> ENot(EEqualsEquals(convert_rhs b1, convert_rhs b2))
+      | LessThan (rhs1, rhs2) -> ELessThan(convert_rhs rhs1, convert_rhs rhs2)
+      | LessThanEquals (rhs1, rhs2) -> ELessThanEquals(convert_rhs rhs1, convert_rhs rhs2)
+      | GreaterThan (rhs1, rhs2) -> EGreaterThan(convert_rhs rhs1, convert_rhs rhs2)
+      | GreaterThanEquals (rhs1, rhs2) -> EGreaterThanEquals(convert_rhs rhs1, convert_rhs rhs2)
     end 
   | CollectionRHS collection_lit ->
     begin match collection_lit with
       | MapLit kvpairs -> EMap (List.map (fun (k, v) -> (k, convert_rhs v)) kvpairs);
       | ListLit items -> EList (List.map (fun (v) -> convert_rhs v) items)
-      | ListPrepend (rhs, ls) -> 
-        begin match convert_rhs ls with 
-          | EList ls -> EList ((convert_rhs rhs) :: ls)
-          | _ -> failwith "Can't prepend to a data type that isn't a list"
-        end
-      | ListAppend (ls, rhs) -> 
-        begin match convert_rhs ls with 
-          | EList ls -> EList (ls @ [convert_rhs rhs])
-          | _ -> failwith "Can't append to a data type that isn't a list"
-        end
+      | ListPrepend (rhs, ls) -> EListPrepend(convert_rhs rhs, convert_rhs ls)
+      | ListAppend (ls, rhs) -> EListAppend(convert_rhs ls, convert_rhs rhs)
     end
   | RpcCallRHS _ -> failwith "Already implemented RpcCallRHS in top level"
-  | Head ls -> 
-    begin match convert_rhs ls with
-      | EList l ->
-        begin match l with
-          | [] -> failwith "Can't get head of an empty list"
-          | hd :: _ -> hd
-        end
-      | _ -> failwith "Can't get head of a data type that isn't a list"
-    end
-  | Tail ls -> 
-    begin match convert_rhs ls with
-      | EList l ->
-        begin match l with
-          | [] -> failwith "Can't get tail of an empty list"
-          | _ -> List.hd (List.rev l)
-        end
-      | _ -> failwith "Can't get tail of a data type that isn't a list"
-    end
-  | Len ls -> 
-    begin match convert_rhs ls with
-      | EList l -> EInt (List.length l)
-      | _ -> failwith "Can't get length of a data type that isn't a list"
-    end
-  | ListAccess (ls, idx) -> 
-    begin match convert_rhs ls, convert_rhs idx with
-      | EList l, EInt i -> 
-        if List.length l = 0 then 
-          failwith "Can't index into empty list"
-        else if i < 0 then 
-          failwith "Can't index into list with negative index"
-        else if i >= List.length l then
-          failwith "Can't index into list with index greater than length"
-        else
-          List.nth l i
-      | _ -> failwith "Can't index into something that isn't a list"
-    end
+  | Head ls -> EListAccess(convert_rhs ls, 0)
+  | Tail _ -> failwith "Didn't implement Tail yet"
+  | Len ls -> EListLen(convert_rhs ls)
+  | ListAccess (ls, idx) -> EListAccess(convert_rhs ls,  idx)
 
 let rec generate_cfg_from_stmts (stmts : statement list) (cfg : CFG.t) (last_vert : CFG.vertex) : CFG.vertex =
   match stmts with
@@ -461,7 +425,8 @@ let interp (spec : string) (intermediate_output : string) (scheduler_config_json
   let new_chain_len = List.length new_chain in
   let write_call = 1 in 
   let add_node_call = 1 in
-  let added_node = ref false in
+  (* let added_node = ref false in *)
+  let added_node = ref true in 
   (* let deleted_node = ref false in *)
   let delete_node_call = 1 in
   let limit = 500 in
