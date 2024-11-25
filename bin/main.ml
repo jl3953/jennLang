@@ -127,6 +127,19 @@ let rec convert_rhs (rhs : rhs) : Simulator.expr =
       | EList l -> EInt (List.length l)
       | _ -> failwith "Can't get length of a data type that isn't a list"
     end
+  | ListAccess (ls, idx) -> 
+    begin match convert_rhs ls, convert_rhs idx with
+      | EList l, EInt i -> 
+        if List.length l = 0 then 
+          failwith "Can't index into empty list"
+        else if i < 0 then 
+          failwith "Can't index into list with negative index"
+        else if i >= List.length l then
+          failwith "Can't index into list with index greater than length"
+        else
+          List.nth l i
+      | _ -> failwith "Can't index into something that isn't a list"
+    end
 
 let rec generate_cfg_from_stmts (stmts : statement list) (cfg : CFG.t) (last_vert : CFG.vertex) : CFG.vertex =
   match stmts with

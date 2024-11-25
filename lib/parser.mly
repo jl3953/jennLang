@@ -223,6 +223,14 @@ list_lit:
   | PREPEND LEFT_PAREN item = right_side COMMA ls = right_side RIGHT_PAREN
     { ListPrepend(item, ls) }
 
+list_ops:
+  | HEAD LEFT_PAREN ls = right_side RIGHT_PAREN
+    { Head(ls) }
+  | TAIL LEFT_PAREN ls = right_side RIGHT_PAREN
+    { Tail(ls) }
+  | LEN LEFT_PAREN ls = right_side RIGHT_PAREN
+    { Len(ls) }
+
 right_side:
   | id = ID
     { VarRHS(id) }
@@ -238,12 +246,8 @@ right_side:
     { CollectionRHS c }
   | rpc_call = rpc_call
     { RpcCallRHS rpc_call }
-  | HEAD LEFT_PAREN ls = right_side RIGHT_PAREN
-    { Head(ls) }
-  | TAIL LEFT_PAREN ls = right_side RIGHT_PAREN
-    { Tail(ls) }
-  | LEN LEFT_PAREN ls = right_side RIGHT_PAREN
-    { Len(ls) }
+  | lo = list_ops
+    { lo }
   (*| rhs = right_side DOT key = ID
     { FieldAccessRHS(rhs, key) }*)
 

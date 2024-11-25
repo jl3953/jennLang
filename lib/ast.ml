@@ -30,6 +30,7 @@ and rhs =
   | Head of rhs
   | Tail of rhs
   | Len of rhs
+  | ListAccess of rhs * rhs
 
 and collection = 
   | MapLit of (string * rhs) list
