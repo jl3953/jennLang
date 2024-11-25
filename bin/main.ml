@@ -92,8 +92,41 @@ let rec convert_rhs (rhs : rhs) : Simulator.expr =
     begin match collection_lit with
       | MapLit kvpairs -> EMap (List.map (fun (k, v) -> (k, convert_rhs v)) kvpairs);
       | ListLit items -> EList (List.map (fun (v) -> convert_rhs v) items)
+      | ListPrepend (rhs, ls) -> 
+        begin match convert_rhs ls with 
+          | EList ls -> EList ((convert_rhs rhs) :: ls)
+          | _ -> failwith "Can't prepend to a data type that isn't a list"
+        end
+      | ListAppend (ls, rhs) -> 
+        begin match convert_rhs ls with 
+          | EList ls -> EList (ls @ [convert_rhs rhs])
+          | _ -> failwith "Can't append to a data type that isn't a list"
+        end
     end
   | RpcCallRHS _ -> failwith "Already implemented RpcCallRHS in top level"
+  | Head ls -> 
+    begin match convert_rhs ls with
+      | EList l ->
+        begin match l with
+          | [] -> failwith "Can't get head of an empty list"
+          | hd :: _ -> hd
+        end
+      | _ -> failwith "Can't get head of a data type that isn't a list"
+    end
+  | Tail ls -> 
+    begin match convert_rhs ls with
+      | EList l ->
+        begin match l with
+          | [] -> failwith "Can't get tail of an empty list"
+          | _ -> List.hd (List.rev l)
+        end
+      | _ -> failwith "Can't get tail of a data type that isn't a list"
+    end
+  | Len ls -> 
+    begin match convert_rhs ls with
+      | EList l -> EInt (List.length l)
+      | _ -> failwith "Can't get length of a data type that isn't a list"
+    end
 
 let rec generate_cfg_from_stmts (stmts : statement list) (cfg : CFG.t) (last_vert : CFG.vertex) : CFG.vertex =
   match stmts with

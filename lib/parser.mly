@@ -7,6 +7,7 @@
 %token <bool> TRUE FALSE
 %token <int> INT
 %token AND
+%token APPEND
 %token ARROW
 %token AWAIT
 %token BANG
@@ -18,20 +19,24 @@
 %token EQUALS_EQUALS
 %token FOR
 %token FUNC
+%token HEAD
 %token IF ELSEIF ELSE
 %token IN
 %token LEFT_ANGLE_BRACKET RIGHT_ANGLE_BRACKET
 %token LEFT_CURLY_BRACE RIGHT_CURLY_BRACE 
 %token LEFT_PAREN RIGHT_PAREN 
 %token LEFT_SQUARE_BRACKET RIGHT_SQUARE_BRACKET
+%token LEN
 %token MAP
 %token NOT_EQUALS
 %token OPTIONS
 %token OR
+%token PREPEND
 %token RETURN
 %token RPC_ASYNC_CALL
 %token RPC_CALL
 %token SEMICOLON
+%token TAIL
 %token QUOTE
 %token EOF
 
@@ -144,15 +149,13 @@ items:
   | rhs = right_side COMMA rest = items
     { rhs :: rest }
 
-collection_literal:
+collection:
   | LEFT_CURLY_BRACE RIGHT_CURLY_BRACE
     { MapLit([]) }
   | LEFT_CURLY_BRACE kvs = kv_pairs RIGHT_CURLY_BRACE
     { MapLit(kvs) }
-  | LEFT_SQUARE_BRACKET RIGHT_SQUARE_BRACKET
-    { ListLit([]) }
-  | LEFT_SQUARE_BRACKET items = items RIGHT_SQUARE_BRACKET
-    { ListLit(items) }
+  | l = list_lit
+    { l}
   
 literals:
   | OPTIONS LEFT_PAREN opts = options RIGHT_PAREN
@@ -209,6 +212,17 @@ boolean:
   | LEFT_PAREN b = boolean RIGHT_PAREN
     { b }
 
+
+list_lit:
+  | LEFT_SQUARE_BRACKET RIGHT_SQUARE_BRACKET
+    { ListLit([]) }
+  | LEFT_SQUARE_BRACKET items = items RIGHT_SQUARE_BRACKET
+    { ListLit(items) }
+  | APPEND LEFT_PAREN ls = right_side COMMA item = right_side RIGHT_PAREN
+    { ListAppend(ls, item) }
+  | PREPEND LEFT_PAREN item = right_side COMMA ls = right_side RIGHT_PAREN
+    { ListPrepend(item, ls) }
+
 right_side:
   | id = ID
     { VarRHS(id) }
@@ -220,10 +234,16 @@ right_side:
     { LiteralRHS(literal) }
   | b = boolean
     { BoolRHS b }
-  | c = collection_literal
+  | c = collection
     { CollectionRHS c }
   | rpc_call = rpc_call
     { RpcCallRHS rpc_call }
+  | HEAD LEFT_PAREN ls = right_side RIGHT_PAREN
+    { Head(ls) }
+  | TAIL LEFT_PAREN ls = right_side RIGHT_PAREN
+    { Tail(ls) }
+  | LEN LEFT_PAREN ls = right_side RIGHT_PAREN
+    { Len(ls) }
   (*| rhs = right_side DOT key = ID
     { FieldAccessRHS(rhs, key) }*)
 
@@ -236,10 +256,10 @@ statement:
     { Expr(r) }
   | RETURN r = right_side SEMICOLON
     { Return(r) }
-  | FOR LEFT_PAREN idx = left_side IN collection = right_side RIGHT_PAREN LEFT_CURLY_BRACE
+  | FOR LEFT_PAREN idx = left_side IN col = right_side RIGHT_PAREN LEFT_CURLY_BRACE
     body = statements
     RIGHT_CURLY_BRACE
-    { ForLoopIn(idx, collection, body) }
+    { ForLoopIn(idx, col, body) }
   | AWAIT r = right_side SEMICOLON
     { Await(r) }
 

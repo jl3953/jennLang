@@ -71,19 +71,24 @@ and token = parse
   | "&&" {AND}
   | "||" {OR}
   | "await" { AWAIT }
-  | "true" { TRUE true }
-  | "false" { FALSE false }
-  | "func" { FUNC }
-  | "if" { IF }
+  | "append" { APPEND }
   | "else if" { ELSEIF }
   | "else" { ELSE }
+  | "false" { FALSE false }
   | "for" { FOR }
+  | "func" { FUNC }
+  | "hd" { HEAD }
+  | "if" { IF }
   | "in" { IN }
+  | "len" { LEN }
   | "map" { MAP }
   | "Options" { OPTIONS }
+  | "prepend" { PREPEND }
   | "return" { RETURN }
   | "rpc_async_call" { RPC_ASYNC_CALL}
   | "rpc_call" { RPC_CALL }
+  | "tl" { TAIL }
+  | "true" { TRUE true }
   | "ClientInterface" { CLIENT_INTERFACE }
   | id as s { ID s }
   | eof { EOF }

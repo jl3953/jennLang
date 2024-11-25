@@ -25,12 +25,17 @@ and rhs =
   | LiteralRHS of literal 
   | FieldAccessRHS of rhs * string
   | BoolRHS of boolean
-  | CollectionRHS of collection_literal
+  | CollectionRHS of collection
   | RpcCallRHS of rpc_call
+  | Head of rhs
+  | Tail of rhs
+  | Len of rhs
 
-and collection_literal = 
+and collection = 
   | MapLit of (string * rhs) list
   | ListLit of rhs list
+  | ListPrepend of rhs * rhs
+  | ListAppend of rhs * rhs
 
 and param = Param of rhs 
 
