@@ -161,6 +161,7 @@ type state =
   ; mutable records : record list
   ; history : operation DA.t
   ; mutable free_clients : int list (* client ids should be valid indexes into nodes *)
+  ; mutable free_sys_threads : int list (* internal systems threads *)
   }
 
 (* Execution environment of an activation record: local variables +
@@ -578,3 +579,53 @@ let schedule_client (state : state) (program : program) (func_name : string) (ac
         pick (n-1) (c::before) cs
   in
   pick (Random.self_init(); Random.int (List.length state.free_clients)) [] state.free_clients
+
+
+let schedule_sys_thread (state : state) (program : program) (func_name : string) (actuals : value list) (unique_id : int): unit =
+  let rec pick n before after =
+    match after with
+    | [] -> raise Halt 
+    | (c::cs) ->
+      if n == 0 then begin
+        let op = Env.find program.client_ops func_name
+        in
+        let env = Env.create 91 in
+        List.iter2 (fun (formal, _) actual ->
+            Env.add env formal actual
+          ) op.formals actuals;
+        let invocation =
+          { client_id = c
+          ; op_action = op.name
+          ; kind = Invocation
+          ; payload = actuals
+          ; unique_id = unique_id }
+        in
+        let continuation value =
+          (* After completing the operation, add response to the history and
+             allow client to be scheduled again. *)
+          let response =
+            { client_id = c
+            ; op_action = op.name
+            ; kind = Response
+            ; payload = [value]
+            ; unique_id = unique_id }
+          in
+          DA.add state.history response;
+          state.free_sys_threads <- c::state.free_sys_threads
+        in
+        let record =
+          { pc = op.entry
+          ; node = c
+          ; continuation = continuation
+          ; env = env 
+          ; id = unique_id
+          ; x = 0.4
+          ; f = (fun x -> x /. 2.0) }
+        in
+        state.free_sys_threads <- List.rev_append before cs;
+        DA.add state.history invocation;
+        state.records <- record::state.records
+      end else
+        pick (n-1) (c::before) cs
+  in
+  pick (Random.self_init(); Random.int (List.length state.free_sys_threads)) [] state.free_sys_threads

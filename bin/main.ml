@@ -26,6 +26,7 @@ let read_config_file (filename: string) : config =
 
 let num_servers = 7
 let num_clients = 14
+let num_sys_threads = num_servers * 3
 let chain_len = 6
 let head_idx = 0
 let tail_idx = chain_len - 1
@@ -49,10 +50,12 @@ let increment_birthday () : int =
   !jenns_birthday_counter
 
 let global_state = 
-  { nodes = Array.init (num_servers + num_clients) (fun _ -> Env.create 91) 
+  { nodes = Array.init (num_servers + num_clients + num_sys_threads) (fun _ -> Env.create 91) 
   ; records = []
   ; history = DA.create () 
-  ; free_clients = List.init num_clients (fun i -> num_servers + i) }
+  ; free_clients = List.init num_clients (fun i -> num_servers + i) 
+  ; free_sys_threads = List.init num_sys_threads (fun i -> num_servers + num_clients + i)
+  }
 
 let convert_lhs(lhs : Ast.lhs) : Simulator.lhs =
   match lhs with 
@@ -67,7 +70,7 @@ let rec convert_rhs (rhs : rhs) : Simulator.expr =
   | MapAccessRHS(map, key) -> EFind(map, EVar(key))
   | FuncCallRHS func_call ->
     begin match func_call with
-      | FuncCall(func_name, _) -> failwith ("Didn't implement FuncCallRHS yet func: " ^ func_name)
+      | FuncCall _ -> failwith ("Already implemented FuncCallRHS in top level")
     end
   | LiteralRHS literal -> 
     begin match literal with
@@ -90,7 +93,7 @@ let rec convert_rhs (rhs : rhs) : Simulator.expr =
       | MapLit kvpairs -> EMap (List.map (fun (k, v) -> (k, convert_rhs v)) kvpairs);
       | ListLit items -> EList (List.map (fun (v) -> convert_rhs v) items)
     end
-  | RpcCallRHS _ -> failwith "Didn't implement RpcCallRHS yet"
+  | RpcCallRHS _ -> failwith "Already implemented RpcCallRHS in top level"
 
 let rec generate_cfg_from_stmts (stmts : statement list) (cfg : CFG.t) (last_vert : CFG.vertex) : CFG.vertex =
   match stmts with
@@ -130,6 +133,17 @@ let rec generate_cfg_from_stmts (stmts : statement list) (cfg : CFG.t) (last_ver
                     let async_vertex = CFG.create_vertex cfg (Instr(Async(LVar "ret", EVar node, func_name, actuals), next_vert)) in
                     CFG.create_vertex cfg (Pause async_vertex)
                 end
+            end
+          | FuncCallRHS func_call -> 
+            begin match func_call with
+              | FuncCall(func_name, actuals) -> 
+                let actuals = List.map (fun actual -> 
+                    match actual with Param(rhs) -> convert_rhs rhs
+                  ) actuals in
+                let assign_vert = CFG.create_vertex cfg (Instr(Assign(LVar "ret", EVar "dontcare"), next_vert)) in
+                let await_vertex = CFG.create_vertex cfg (Await(LVar("dontcare"), EVar "async_future", assign_vert)) in
+                let async_vertex = CFG.create_vertex cfg (Instr(Async(LVar "async_future", EVar "self", func_name, actuals), await_vertex)) in
+                CFG.create_vertex cfg (Pause async_vertex)
             end
           | rhs -> CFG.create_vertex cfg (Instr(Assign(LVar "ret", convert_rhs rhs), next_vert))
         end
@@ -376,18 +390,18 @@ let interp (spec : string) (intermediate_output : string) (scheduler_config_json
   sync_exec global_state prog false false false [] false;
   print_endline "wrote 215";
 
-  for node = 0 to chain_len do
-    schedule_client global_state prog "startFailover" [VNode node] 0;
-  done;
-  sync_exec global_state prog false false false [] false;
-  for node = 0 to chain_len do 
-    schedule_client global_state prog "addNode" [VNode node; VNode 5; VNode 6] 0;
-  done;
-  sync_exec global_state prog false false false [] false;
-  for node = 0 to chain_len do 
-    schedule_client global_state prog "endFailover" [VNode node] 0;
-  done;
-  sync_exec global_state prog false false false [] false;
+  (* for node = 0 to chain_len do
+     schedule_client global_state prog "startFailover" [VNode node] 0;
+     done;
+     sync_exec global_state prog false false false [] false;
+     for node = 0 to chain_len do 
+     schedule_client global_state prog "addNode" [VNode node; VNode 5; VNode 6] 0;
+     done;
+     sync_exec global_state prog false false false [] false;
+     for node = 0 to chain_len do 
+     schedule_client global_state prog "endFailover" [VNode node] 0;
+     done;
+     sync_exec global_state prog false false false [] false; *)
 
   (* schedule_client global_state prog "write" [VNode 0; VString "birthday"; VInt (increment_birthday())] 0; *)
   (* bootlegged_sync_exec global_state prog false false false true; *)
@@ -399,14 +413,54 @@ let interp (spec : string) (intermediate_output : string) (scheduler_config_json
 
   let new_chain = [0; 1; 2; 3; 4; 5; 6] in
   let new_chain_len = List.length new_chain in
+  let write_call = 1 in 
+  let add_node_call = 1 in
+  let added_node = ref false in
+  (* let deleted_node = ref false in *)
+  let delete_node_call = 1 in
   let limit = 500 in
   for i = 0 to limit do
     if (List.length global_state.free_clients > 0) then 
       begin
-        let choose_client_threshold = new_chain_len + 1 in (* possible reads + a possible write *)
+        let choose_client_threshold = new_chain_len + write_call + add_node_call + delete_node_call in
         let random_int = Random.self_init(); Random.int (List.length global_state.records + choose_client_threshold) in
         if (random_int == 0) then 
           schedule_client global_state prog "write" [VNode 0; VString "birthday"; VInt (increment_birthday())] 0
+        else if (random_int == 1) then
+          (* simulate zookeeper coordinating things *)
+          begin if not !added_node then 
+              begin
+                added_node := true;
+                for node = 0 to chain_len do
+                  schedule_sys_thread global_state prog "addNode" [VNode node; VNode 5; VNode 6] 0
+                done; 
+                bootlegged_sync_exec global_state prog 
+                  randomly_drop_msgs cut_tail_from_mid sever_all_to_tail_but_mid partition_away_nodes randomly_delay_msgs; 
+                for node = 0 to chain_len do
+                  schedule_sys_thread global_state prog "endFailover" [VNode node] 0
+                done
+              end
+          end
+          (* else if (random_int == 2) then
+             (* simulate zookeeper coordinating things *)
+             begin if not !deleted_node then 
+                begin
+                  added_node := true;
+                  for node = 0 to chain_len do
+                    schedule_sys_thread global_state prog "startFailover" [VNode node] 0
+                  done; 
+                  bootlegged_sync_exec global_state prog 
+                    randomly_drop_msgs cut_tail_from_mid sever_all_to_tail_but_mid partition_away_nodes randomly_delay_msgs; 
+                  for node = 0 to chain_len do
+                    schedule_sys_thread global_state prog "deleteNode" [VNode node; VNode 5; VNode 6] 0
+                  done; 
+                  bootlegged_sync_exec global_state prog 
+                    randomly_drop_msgs cut_tail_from_mid sever_all_to_tail_but_mid partition_away_nodes randomly_delay_msgs; 
+                  for node = 0 to chain_len do
+                    schedule_sys_thread global_state prog "endFailover" [VNode node] 0
+                  done
+                end
+             end *)
         else if (random_int < choose_client_threshold) then
           let read_node = Random.self_init(); List.nth new_chain (Random.int (new_chain_len)) in
           Printf.printf "Reading from node %d\n" read_node;

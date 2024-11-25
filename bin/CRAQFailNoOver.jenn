@@ -171,6 +171,7 @@ Node {
     }
 
     func AddNode(old_tail, new_node) -> none {
+        StartFailover();
         await inFailover == true;
         
         tail = new_node;
