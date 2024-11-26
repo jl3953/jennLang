@@ -57,17 +57,23 @@ let global_state =
   ; free_sys_threads = List.init num_sys_threads (fun i -> num_servers + num_clients + i)
   }
 
-let convert_lhs(lhs : Ast.lhs) : Simulator.lhs =
+let rec convert_lhs(lhs : Ast.lhs) : Simulator.lhs =
   match lhs with 
   | VarLHS (var_name) -> LVar(var_name)
-  | CollectionAccessLHS (map_name, key) -> LAccess(LVar(map_name), EVar(key))
+  | CollectionAccessLHS collection_access ->
+    begin match collection_access with
+        CollectionAccess(collection, key) -> LAccess(convert_rhs collection, convert_rhs key)
+    end
   | FieldAccessLHS (_, _) -> failwith "TODO what on earth is FieldAccessLHS again?"
   | TupleLHS lefts -> LTuple lefts
 
 let rec convert_rhs (rhs : rhs) : Simulator.expr =
   match rhs with
   | VarRHS var -> EVar(var)
-  | CollectionAccess(c, key) -> EFind(convert_rhs c, convert_rhs key)
+  | CollectionAccessRHS collection_access ->
+    begin match collection_access with
+        CollectionAccess(collection, key) -> EFind(convert_rhs collection, convert_rhs key)
+    end
   | FuncCallRHS func_call ->
     begin match func_call with
       | FuncCall _ -> failwith ("Already implemented FuncCallRHS in top level")
@@ -160,6 +166,13 @@ let rec generate_cfg_from_stmts (stmts : statement list) (cfg : CFG.t) (last_ver
       | Return exp -> 
         let ret_vert = CFG.create_vertex cfg (Return (EVar "ret")) in
         generate_cfg_from_stmts [Expr exp] cfg ret_vert
+      | ForLoop (init_stmt, cond, update, body) ->
+        let cond_vert = CFG.fresh_vertex cfg in
+        let update_vert = generate_cfg_from_stmts [update] cfg cond_vert in
+        let body_vert = generate_cfg_from_stmts body cfg update_vert in
+        CFG.set_label cfg cond_vert (Cond(convert_rhs cond, body_vert, next_vert));
+        let init_vert = generate_cfg_from_stmts [init_stmt] cfg cond_vert in
+        init_vert
       | ForLoopIn (idx, collection, body) -> 
         let for_vert = CFG.fresh_vertex cfg in
         (* let ret_vert = CFG.create_vertex cfg (Return(EBool true)) in *)

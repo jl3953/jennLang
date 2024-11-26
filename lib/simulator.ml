@@ -47,7 +47,7 @@ type expr =
 
 type lhs =
   | LVar of string
-  | LAccess of lhs * expr
+  | LAccess of expr * expr
   | LTuple of string list
 [@@deriving ord]
 
@@ -83,6 +83,7 @@ type value =
 type lvalue =
   | LVVar of string
   | LVAccess of (value * (value, value) Hashtbl.t)
+  | LVAccessList of (value * value list)
   | LVTuple of string list
 
 module Env = Hashtbl.Make(struct
@@ -206,26 +207,26 @@ let rec eval (env : record_env) (expr : expr) : value =
   | EVar v -> load v env
   | EFind (c, k) ->
     begin match eval env c with
-    | VMap map -> Hashtbl.find map (eval env k)
-    | VList l -> 
-      begin match l with 
-        | [] -> failwith "Cannot index into empty list"
-        | _ ->
-          begin match eval env k with 
-          | VInt i -> 
-            if i < 0 || i >= List.length l then 
-              failwith "idx out of range"
-            else
-            List.nth l i
-          | _ -> failwith "Cannot index into a list with non-integer"
-          end
-      end
-    | VString s -> 
-      begin match load s env with
-        | VMap map -> Hashtbl.find map (eval env k)
-        | _ -> failwith "EFind eval fail"
-      end
-    | _ -> failwith "EFind eval fail"
+      | VMap map -> Hashtbl.find map (eval env k)
+      | VList l -> 
+        begin match l with 
+          | [] -> failwith "Cannot index into empty list"
+          | _ ->
+            begin match eval env k with 
+              | VInt i -> 
+                if i < 0 || i >= List.length l then 
+                  failwith "idx out of range"
+                else
+                  List.nth l i
+              | _ -> failwith "Cannot index into a list with non-integer"
+            end
+        end
+      | VString s -> 
+        begin match load s env with
+          | VMap map -> Hashtbl.find map (eval env k)
+          | _ -> failwith "EFind eval fail"
+        end
+      | _ -> failwith "EFind eval fail"
     end
   | ENot e -> 
     begin match eval env e with
@@ -320,19 +321,11 @@ let rec eval (env : record_env) (expr : expr) : value =
 let rec eval_lhs (env : record_env) (lhs : lhs) : lvalue =
   match lhs with
   | LVar var -> LVVar var
-  | LAccess (lhs, exp) ->
-    begin match eval_lhs env lhs with
-      | LVVar var ->
-        begin match load var env with
-          | VMap map -> LVAccess (eval env exp, map)
-          | _ -> failwith "LVVar eval_lhs fail"
-        end
-      | LVAccess (key, table) ->
-        begin match Hashtbl.find table key with
-          | VMap map -> LVAccess (eval env exp, map)
-          | _ -> failwith "LVAccess eval_lhs fail"
-        end
-      | LVTuple _ -> failwith "Stop accessing maps with tuples"
+  | LAccess (collection, exp) ->
+    begin match eval env collection with
+      | VMap map -> LVAccess (eval env exp, map)
+      | VList l -> LVAccessList (eval env exp, l)
+      | _ -> failwith "LAccess can't index into non-collection types"
     end
   | LTuple strs -> LVTuple strs
 
@@ -345,6 +338,28 @@ let store (lhs : lhs) (vl : value) (env : record_env) : unit =
       Env.replace env.node_env var vl
   | LVAccess (key, table) ->
     Hashtbl.replace table key vl
+  | LVAccessList (idx, l) ->
+    begin match idx with
+      | VInt i -> 
+        if i < 0 || i >= List.length l then 
+          failwith "LVAccess idx out of range"
+        else if List.length l == 0 then
+          failwith "LVAccess empty list"
+        else
+          let new_list = 
+          let rec update_list (l : value list) (idx : int) (vl : value) : value list =
+            begin match l with
+              | [] -> []
+              | hd :: tl -> 
+                if idx == 0 then
+                  vl :: tl
+                else
+                  hd :: (update_list tl (idx - 1) vl)
+            end in update_list l i vl
+          in Env.replace env.local_env (List.hd l) (VList new_list)
+          
+      | _ -> failwith "Can't index into a list with non-integer"
+    end
   | LVTuple _ -> failwith "how to store LVTuples?"
 
 exception Halt
