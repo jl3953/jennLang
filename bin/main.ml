@@ -57,16 +57,6 @@ let global_state =
   ; free_sys_threads = List.init num_sys_threads (fun i -> num_servers + num_clients + i)
   }
 
-let rec convert_lhs(lhs : Ast.lhs) : Simulator.lhs =
-  match lhs with 
-  | VarLHS (var_name) -> LVar(var_name)
-  | CollectionAccessLHS collection_access ->
-    begin match collection_access with
-        CollectionAccess(collection, key) -> LAccess(convert_rhs collection, convert_rhs key)
-    end
-  | FieldAccessLHS (_, _) -> failwith "TODO what on earth is FieldAccessLHS again?"
-  | TupleLHS lefts -> LTuple lefts
-
 let rec convert_rhs (rhs : rhs) : Simulator.expr =
   match rhs with
   | VarRHS var -> EVar(var)
@@ -110,6 +100,16 @@ let rec convert_rhs (rhs : rhs) : Simulator.expr =
   | Tail _ -> failwith "Didn't implement Tail yet"
   | Len ls -> EListLen(convert_rhs ls)
   | ListAccess (ls, idx) -> EListAccess(convert_rhs ls,  idx)
+
+let convert_lhs(lhs : Ast.lhs) : Simulator.lhs =
+  match lhs with 
+  | VarLHS (var_name) -> LVar(var_name)
+  | CollectionAccessLHS collection_access ->
+    begin match collection_access with
+        CollectionAccess(collection, key) -> LAccess(convert_rhs collection, convert_rhs key)
+    end
+  | FieldAccessLHS (_, _) -> failwith "TODO what on earth is FieldAccessLHS again?"
+  | TupleLHS lefts -> LTuple lefts
 
 let rec generate_cfg_from_stmts (stmts : statement list) (cfg : CFG.t) (last_vert : CFG.vertex) : CFG.vertex =
   match stmts with

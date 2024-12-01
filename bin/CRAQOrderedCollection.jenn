@@ -29,14 +29,13 @@ Node {
 
         if (role == "Head") {
             db[key] = append(db[key], value);
-            is_committed[key] = append(is_commited[key], false);
+            is_committed[key] = append(is_committed[key], false);
             idx = len(db[key]) - 1;
-            rpc_async_call(successor, Write(key, value));
+            /*rpc_async_call(successor, Write(key, value));
             
             // doesn't allow for GC, b/c idx changes with that
-            await is_committed[key][idx] == true;
-
-        } else if (role == "Mid") {
+            await is_committed[key][idx] == true;*/
+        } /*else if (role == "Mid") {
             db[key] = append(db[key], value);
             is_committed[key] = append(is_committed[key], false);
             idx = len(db[key]) - 1;
@@ -46,27 +45,26 @@ Node {
             await is_committed[key][idx] == true;
             
             rpc_async_call(predecessor, AckWrite(key, value));
-
         } else {
             // role == "Tail"
             db[key] = append(db[key], value);
             is_committed[key] = append(is_committed[key], true);
             rpc_async_call(predecessor, AckWrite(key, value));
-        }
+        }*/
     }
     
     func AckWrite(key, value) -> none {
         await inFailover == false;
 
         // assume each value is unique
-        for (idx = 0; idx < len(db[key]); idx++) {
+        /*for (idx = 0; idx < len(db[key]); idx++) {
             if (db[key][value] == value) {
                 is_committed[key][idx] = true;
             }
-        }
+        }*/
     }
     
-    func DeleteNode(deleted_node, new_head, new_tail) -> none {
+    /* func DeleteNode(deleted_node, new_head, new_tail) -> none {
 
         await inFailover == true;
 
@@ -120,7 +118,7 @@ Node {
 
     func EndFailover() -> none {
         inFailover = false;
-    }
+    } */
 
     func Init(assigned_role, pred, pred_pred, succ, succ_succ, h, t, s, data) -> none {
         role = assigned_role;
@@ -138,12 +136,12 @@ Node {
 
         for (key, value in data) {
             temp = 1;
-            db[key] = value;
-            is_committed[key] = true;
+            db[key] = [value];
+            is_committed[key] = [true];
             //versions[key] = 0;
         }
     }
-
+    /*
     // Receiving dirty logs
     func PropagateDirtyLogs(dirty_logs) -> none {
         diff_dirty_logs = {};
@@ -190,7 +188,7 @@ Node {
         } else if (self == new_node) {
             predecessor = old_tail;
         }
-    }
+    } */
 }
 
 ClientInterface { 

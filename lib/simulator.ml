@@ -83,7 +83,7 @@ type value =
 type lvalue =
   | LVVar of string
   | LVAccess of (value * (value, value) Hashtbl.t)
-  | LVAccessList of (value * value list)
+  | LVAccessList of (value * value list ref)
   | LVTuple of string list
 
 module Env = Hashtbl.Make(struct
@@ -318,13 +318,13 @@ let rec eval (env : record_env) (expr : expr) : value =
       | _ -> failwith "Can't index into something that isn't a list"
     end
 
-let rec eval_lhs (env : record_env) (lhs : lhs) : lvalue =
+let eval_lhs (env : record_env) (lhs : lhs) : lvalue =
   match lhs with
   | LVar var -> LVVar var
   | LAccess (collection, exp) ->
     begin match eval env collection with
       | VMap map -> LVAccess (eval env exp, map)
-      | VList l -> LVAccessList (eval env exp, l)
+      | VList l -> LVAccessList (eval env exp, ref l)
       | _ -> failwith "LAccess can't index into non-collection types"
     end
   | LTuple strs -> LVTuple strs
@@ -338,26 +338,16 @@ let store (lhs : lhs) (vl : value) (env : record_env) : unit =
       Env.replace env.node_env var vl
   | LVAccess (key, table) ->
     Hashtbl.replace table key vl
-  | LVAccessList (idx, l) ->
+  | LVAccessList (idx, ref_l) ->
     begin match idx with
       | VInt i -> 
-        if i < 0 || i >= List.length l then 
+        if i < 0 || i >= List.length !ref_l then 
           failwith "LVAccess idx out of range"
-        else if List.length l == 0 then
+        else if List.length !ref_l == 0 then
           failwith "LVAccess empty list"
         else
-          let new_list = 
-          let rec update_list (l : value list) (idx : int) (vl : value) : value list =
-            begin match l with
-              | [] -> []
-              | hd :: tl -> 
-                if idx == 0 then
-                  vl :: tl
-                else
-                  hd :: (update_list tl (idx - 1) vl)
-            end in update_list l i vl
-          in Env.replace env.local_env (List.hd l) (VList new_list)
-          
+          let lst = !ref_l in
+          ref_l := List.mapi (fun j x -> if j = i then vl else x) lst
       | _ -> failwith "Can't index into a list with non-integer"
     end
   | LVTuple _ -> failwith "how to store LVTuples?"
