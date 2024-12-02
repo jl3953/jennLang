@@ -72,6 +72,7 @@ and assignment = Assignment of lhs * rhs
 
 and statement =
   | CondList of cond_stmt list 
+  | AssignmentStmt of assignment
   | Expr of rhs
   | Return of rhs
   | ForLoop of assignment * rhs * assignment * statement list

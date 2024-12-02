@@ -295,7 +295,7 @@ statement:
   | cond_stmts = cond_stmts
     { CondList(cond_stmts)}
   | a = assignment SEMICOLON
-    { a }
+    { AssignmentStmt(a) }
   | r = right_side SEMICOLON
     { Expr(r) }
   | RETURN r = right_side SEMICOLON

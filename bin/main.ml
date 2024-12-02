@@ -124,9 +124,12 @@ let rec generate_cfg_from_stmts (stmts : statement list) (cfg : CFG.t) (last_ver
           let next = generate_cfg_from_stmts rest cfg last_vert in
           generate_cfg_from_cond_stmts cond_stmts cfg next
         end
-      | Assignment (lhs, exp) -> 
-        let lhs_vert = CFG.create_vertex cfg (Instr(Assign(convert_lhs lhs, EVar "ret"), next_vert)) in
-        generate_cfg_from_stmts [Expr exp] cfg lhs_vert
+      | AssignmentStmt a ->
+        begin match a with 
+          | Assignment (lhs, exp) -> 
+            let lhs_vert = CFG.create_vertex cfg (Instr(Assign(convert_lhs lhs, EVar "ret"), next_vert)) in
+            generate_cfg_from_stmts [Expr exp] cfg lhs_vert
+        end
       | Expr expr -> 
         begin match expr with
           | RpcCallRHS rpc_call -> 
@@ -170,10 +173,10 @@ let rec generate_cfg_from_stmts (stmts : statement list) (cfg : CFG.t) (last_ver
         generate_cfg_from_stmts [Expr exp] cfg ret_vert
       | ForLoop (init_stmt, cond, update, body) ->
         let cond_vert = CFG.fresh_vertex cfg in
-        let update_vert = generate_cfg_from_stmts [update] cfg cond_vert in
+        let update_vert = generate_cfg_from_stmts [AssignmentStmt update] cfg cond_vert in
         let body_vert = generate_cfg_from_stmts body cfg update_vert in
         CFG.set_label cfg cond_vert (Cond(convert_rhs cond, body_vert, next_vert));
-        let init_vert = generate_cfg_from_stmts [init_stmt] cfg cond_vert in
+        let init_vert = generate_cfg_from_stmts [AssignmentStmt init_stmt] cfg cond_vert in
         init_vert
       | ForLoopIn (idx, collection, body) -> 
         let for_vert = CFG.fresh_vertex cfg in

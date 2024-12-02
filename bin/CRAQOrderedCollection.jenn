@@ -58,7 +58,7 @@ Node {
 
         // assume each value is unique
         for (idx = 0; idx < len(db[key]); idx = idx + 1) {
-            if (db[key][value] == value) {
+            if (db[key][idx] == value) {
                 is_committed[key][idx] = true;
             }
         }
@@ -135,7 +135,6 @@ Node {
         inFailover = false;
 
         for (key, value in data) {
-            temp = 1;
             db[key] = [value];
             is_committed[key] = [true];
             //versions[key] = 0;

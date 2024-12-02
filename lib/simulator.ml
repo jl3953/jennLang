@@ -216,10 +216,25 @@ let rec eval (env : record_env) (expr : expr) : value =
           | _ ->
             begin match eval env k with 
               | VInt i -> 
+                begin
+                  Printf.printf "jenndebug idx %d, list.Length %d\n" i (List.length l);
+                    Printf.printf "jenndebug list %s\n" (String.concat ", " (List.map (fun x -> 
+                      match x with 
+                      | VInt i -> string_of_int i 
+                      | VString s -> s
+                      | VBool b -> string_of_bool b
+                      | VList _ -> "list"
+                      | VFuture _ -> "Vfuture"
+                      | VNode _ -> "VNode"
+                      | VMap _ -> "VMap"
+                      | VOption _ -> "VOption") l));
                 if i < 0 || i >= List.length l then 
-                  failwith "idx out of range"
+                  begin
+                  failwith "idx out of range of VList"
+                  end
                 else
                   List.nth l i
+                end
               | _ -> failwith "Cannot index into a list with non-integer"
             end
         end
@@ -313,7 +328,7 @@ let rec eval (env : record_env) (expr : expr) : value =
           | [] -> failwith "EListAccess eval fail on empty list"
           | _ ->
             if List.length l <= idx || idx < 0 then 
-              failwith "idx out of range"
+              failwith "idx out of range in EListAccess"
             else
               List.nth l idx
         end
