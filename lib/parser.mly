@@ -287,18 +287,22 @@ right_side:
   (*| rhs = right_side DOT key = ID
     { FieldAccessRHS(rhs, key) }*)
 
+assignment:
+  | lhs = left_side EQUALS rhs = right_side
+    { Assignment(lhs, rhs) }
+
 statement:
   | cond_stmts = cond_stmts
     { CondList(cond_stmts)}
-  | left = left_side EQUALS right = right_side SEMICOLON
-    { Assignment(left, right)}
+  | a = assignment SEMICOLON
+    { a }
   | r = right_side SEMICOLON
     { Expr(r) }
   | RETURN r = right_side SEMICOLON
     { Return(r) }
-  | FOR LEFT_PAREN init = statement SEMICOLON
+  | FOR LEFT_PAREN init = assignment SEMICOLON
     cond = right_side SEMICOLON 
-    progress = statement RIGHT_PAREN
+    progress = assignment RIGHT_PAREN
     LEFT_CURLY_BRACE
     body = statements
     RIGHT_CURLY_BRACE

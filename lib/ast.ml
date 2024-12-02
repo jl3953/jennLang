@@ -68,12 +68,13 @@ and lhs =
 (* list of condition to be evaluated * statement body, else condition is just true*)
 type cond_stmt = IfElseIf of rhs * statement list 
 
+and assignment = Assignment of lhs * rhs
+
 and statement =
   | CondList of cond_stmt list 
-  | Assignment of lhs * rhs
   | Expr of rhs
   | Return of rhs
-  | ForLoop of statement * rhs * statement * statement list
+  | ForLoop of assignment * rhs * assignment * statement list
   | ForLoopIn of lhs * rhs * statement list
   | Comment
   | Await of rhs
