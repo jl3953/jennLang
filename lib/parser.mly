@@ -35,6 +35,7 @@
 %token OR
 %token PLUS
 %token PREPEND
+%token PRINT
 %token RETURN
 %token RPC_ASYNC_CALL
 %token RPC_CALL
@@ -43,8 +44,8 @@
 %token QUOTE
 %token EOF
 
-%left LEFT_SQUARE_BRACKET
-%left BANG
+%left LEFT_SQUARE_BRACKET RIGHT_SQUARE_BRACKET
+%right BANG
 %left AND
 %left OR
 %left PLUS MINUS
@@ -313,6 +314,8 @@ statement:
     { ForLoopIn(idx, col, body) }
   | AWAIT r = right_side SEMICOLON
     { Await(r) }
+  | PRINT LEFT_PAREN r = right_side RIGHT_PAREN SEMICOLON
+    { Print(r) }
 
 params:
   | rhs = right_side

@@ -88,6 +88,7 @@ and token = parse
   | "map" { MAP }
   | "Options" { OPTIONS }
   | "prepend" { PREPEND }
+  | "print" { PRINT }
   | "return" { RETURN }
   | "rpc_async_call" { RPC_ASYNC_CALL}
   | "rpc_call" { RPC_CALL }

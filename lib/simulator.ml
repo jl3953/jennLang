@@ -75,7 +75,7 @@ type value =
   | VInt of int
   | VBool of bool
   | VMap of (value, value) Hashtbl.t
-  | VList of value list
+  | VList of value list ref
   | VOption of (value option)
   | VFuture of (value option) ref
   | VNode of int
@@ -102,6 +102,7 @@ type 'a label =
   (*| Read (* jenndbg read a value *)*)
   | Cond of expr * 'a * 'a
   | ForLoopIn of lhs * expr * 'a * 'a
+  | Print of expr * 'a
 
 let to_string(l: 'a label) : string =
   match l with
@@ -117,6 +118,7 @@ let to_string(l: 'a label) : string =
   | Return _ -> "Return"
   | Cond _ -> "Cond"
   | ForLoopIn _ -> "ForLoopIn"
+  | Print _ -> "Print"
 
 module CFG : sig
   type t (* jenndbg: control flow graph type *)
@@ -211,14 +213,14 @@ let rec eval (env : record_env) (expr : expr) : value =
     begin match eval env c with
       | VMap map -> Hashtbl.find map (eval env k)
       | VList l -> 
-        begin match l with 
+        begin match !l with 
           | [] -> failwith "Cannot index into empty list"
           | _ ->
             begin match eval env k with 
               | VInt i -> 
                 begin
-                  Printf.printf "jenndebug idx %d, list.Length %d\n" i (List.length l);
-                    Printf.printf "jenndebug list %s\n" (String.concat ", " (List.map (fun x -> 
+                  Printf.printf "jenndebug idx %d, list.Length %d\n" i (List.length !l);
+                  Printf.printf "jenndebug list %s\n" (String.concat ", " (List.map (fun x -> 
                       match x with 
                       | VInt i -> string_of_int i 
                       | VString s -> s
@@ -227,13 +229,13 @@ let rec eval (env : record_env) (expr : expr) : value =
                       | VFuture _ -> "Vfuture"
                       | VNode _ -> "VNode"
                       | VMap _ -> "VMap"
-                      | VOption _ -> "VOption") l));
-                if i < 0 || i >= List.length l then 
-                  begin
-                  failwith "idx out of range of VList"
-                  end
-                else
-                  List.nth l i
+                      | VOption _ -> "VOption") !l));
+                  if i < 0 || i >= List.length !l then 
+                    begin
+                      failwith "idx out of range of VList"
+                    end
+                  else
+                    List.nth !l i
                 end
               | _ -> failwith "Cannot index into a list with non-integer"
             end
@@ -248,6 +250,12 @@ let rec eval (env : record_env) (expr : expr) : value =
   | ENot e -> 
     begin match eval env e with
       | VBool b -> VBool (not b)
+      | VList _ -> failwith "Cannot negate a list"
+      | VInt _ -> failwith "Cannot negate an int"
+      | VString _ -> failwith "Cannot negate a string"
+      | VNode _ -> failwith "Cannot negate a node"
+      | VMap _ -> failwith "Cannot negate a map"
+      | VOption _ -> failwith "Cannot negate an option"
       | _ -> failwith "ENot eval fail"
     end
   | EAnd (e1, e2) ->
@@ -279,20 +287,20 @@ let rec eval (env : record_env) (expr : expr) : value =
       end in 
     VMap (makemap kvpairs)
   | EList exprs ->
-    let rec makelist (exprs : expr list) : value list =
+    let rec makelist (exprs : expr list) : value list ref =
       begin match exprs with
-        | [] -> []
-        | e :: rest -> (eval env e) :: (makelist rest)
+        | [] -> ref []
+        | e :: rest -> ref ((eval env e) :: !(makelist rest))
       end in
     VList (makelist exprs)
   | EListPrepend (item, ls) ->
     begin match eval env item, eval env ls with
-      | v, VList l -> VList (v :: l)
+      | v, VList l -> VList (ref(v :: !l))
       | _ -> failwith "EListPrepend eval fail"
     end
   | EListAppend (ls, item) ->
     begin match eval env ls, eval env item with
-      | VList l, v -> VList (l @ [v])
+      | VList l, v -> VList (ref(!l @ [v]))
       | _ -> failwith "EListAppend eval fail"
     end
   | EString s -> VString s
@@ -318,31 +326,31 @@ let rec eval (env : record_env) (expr : expr) : value =
     end
   | EListLen e ->
     begin match eval env e with
-      | VList l -> VInt (List.length l)
+      | VList l -> VInt (List.length !l)
       | _ -> failwith "Can't get length of non-list data structure"
     end
   | EListAccess (ls, idx) ->
     begin match eval env ls with
       | VList l -> 
-        begin match l with 
+        begin match !l with 
           | [] -> failwith "EListAccess eval fail on empty list"
           | _ ->
-            if List.length l <= idx || idx < 0 then 
+            if List.length !l <= idx || idx < 0 then 
               failwith "idx out of range in EListAccess"
             else
-              List.nth l idx
+              List.nth !l idx
         end
       | _ -> failwith "Can't index into something that isn't a list"
-      end
+    end
   | EPlus (e1, e2) ->
     begin match eval env e1, eval env e2 with
-    | VInt i1, VInt i2 -> VInt (i1 + i2)
-    | _ -> failwith "EPlus eval fail"
+      | VInt i1, VInt i2 -> VInt (i1 + i2)
+      | _ -> failwith "EPlus eval fail"
     end
   | EMinus (e1, e2) ->
     begin match eval env e1, eval env e2 with
-    | VInt i1, VInt i2 -> VInt (i1 - i2)
-    | _ -> failwith "EMinus eval fail"
+      | VInt i1, VInt i2 -> VInt (i1 - i2)
+      | _ -> failwith "EMinus eval fail"
     end
 
 let eval_lhs (env : record_env) (lhs : lhs) : lvalue =
@@ -351,7 +359,7 @@ let eval_lhs (env : record_env) (lhs : lhs) : lvalue =
   | LAccess (collection, exp) ->
     begin match eval env collection with
       | VMap map -> LVAccess (eval env exp, map)
-      | VList l -> LVAccessList (eval env exp, ref l)
+      | VList l -> LVAccessList (eval env exp, l)
       | _ -> failwith "LAccess can't index into non-collection types"
     end
   | LTuple strs -> LVTuple strs
@@ -373,8 +381,21 @@ let store (lhs : lhs) (vl : value) (env : record_env) : unit =
         else if List.length !ref_l == 0 then
           failwith "LVAccess empty list"
         else
+          begin
           let lst = !ref_l in
-          ref_l := List.mapi (fun j x -> if j = i then vl else x) lst
+          ref_l := List.mapi (fun j x -> if j = i then vl else x) lst;
+          print_endline "derpjenn";
+          print_endline (String.concat ", " (List.map (fun x -> 
+              match x with 
+              | VInt i -> string_of_int i 
+              | VString s -> s
+              | VBool b -> string_of_bool b
+              | VList _ -> "list"
+              | VFuture _ -> "Vfuture"
+              | VNode _ -> "VNode"
+              | VMap _ -> "VMap"
+              | VOption _ -> "VOption") !ref_l))
+          end
       | _ -> failwith "Can't index into a list with non-integer"
     end
   | LVTuple _ -> failwith "how to store LVTuples?"
@@ -389,7 +410,7 @@ let copy (lhs : lhs) (vl : value) (env : record_env) : unit =
         let temp = Hashtbl.copy m in
         Env.replace env.local_env var (VMap temp)
       | VList l ->
-        let temp = List.map (fun x -> x) l in
+        let temp = ref(List.map (fun x -> x) !l) in
         Env.replace env.local_env var (VList temp)
       | _ -> failwith "no copying non-collections"
     end
@@ -531,6 +552,19 @@ let exec (state : state) (program : program) (record : record)  =
             end
         | _ -> failwith "Type error!"
       end
+    | Print (expr, next) -> 
+      Printf.printf "%s\n" (match eval env expr with
+          | VInt i -> string_of_int i
+          | VBool b -> string_of_bool b
+          | VString s -> s
+          | VNode n -> string_of_int n
+          | VMap _ -> "map"
+          | VList _ -> "list"
+          | VOption _ -> "option"
+          | VFuture _ -> "future"
+        );
+      record.pc <- next;
+      loop ()
   in
   loop ()
 
@@ -557,7 +591,7 @@ let schedule_record (state : state) (program : program)
           match CFG.label program.cfg r.pc with
           | Instr (i,_) ->
             begin match i with 
-              | Async (_, node, f, _) -> 
+              | Async (_, node, _, _) -> 
                 let node_id = match eval env node with 
                   | VNode n_id -> n_id
                   | _ -> failwith "Type error!" in
@@ -567,7 +601,6 @@ let schedule_record (state : state) (program : program)
                 begin
                   if randomly_drop_msgs && (Random.self_init(); Random.float 1.0 < 0.3) then
                     begin
-                      Printf.printf "drop msg to node %d\n" node_id;
                       should_execute := false
                     end
                 end;
@@ -575,21 +608,18 @@ let schedule_record (state : state) (program : program)
                   if cut_tail_from_mid && (
                       (src_node = 2 && dest_node = 1) || (dest_node = 2 && src_node = 1)) then
                     begin
-                      Printf.printf "sever msgs from node %d to %d\n" src_node dest_node;
                       should_execute := false
                     end
                 end;
                 begin
-                  if Printf.printf "should sever all but mid? %b\n" sever_all_but_mid; sever_all_but_mid then
+                  if sever_all_but_mid then
                     begin
                       if dest_node = 2 && not (src_node = 1) then
                         begin
-                          Printf.printf "sever all msgs to tail except from mid. srcnode %d destnode %d %s\n" src_node dest_node f;
                           should_execute := false
                         end
                       else if src_node = 2 && not (dest_node = 1) then
                         begin
-                          Printf.printf "sever all msgs from tail except from mid. srcnode %d destnode %d %s\n" src_node dest_node f;
                           should_execute := false
                         end
                     end
@@ -598,13 +628,11 @@ let schedule_record (state : state) (program : program)
                   if List.mem src_node partition_away_nodes || 
                      List.mem dest_node partition_away_nodes then
                     begin
-                      Printf.printf "partition away msgs from node %d to %d func %s\n" 
-                        src_node dest_node f;
                       should_execute := false
                     end
                 end;
                 begin
-                  if Printf.printf "randomly delay msgs %b\n" randomly_delay_msgs; randomly_delay_msgs then
+                  if randomly_delay_msgs then
                     begin
                       if Random.self_init(); Random.float 1.0 < r.x then
                         begin
@@ -624,13 +652,15 @@ let schedule_record (state : state) (program : program)
       end else
         pick (n-1) (r::before) rs
   in
+  (* let idx = 0 in *)
   let idx = (Random.self_init(); Random.int (List.length state.records)) in
   (* let chosen_record = List.nth state.records idx in *)
   (* let vert = chosen_record.pc in  *)
   let chosen_idx = idx
+  (* let chosen_idx =  *)
   (* match (CFG.label program.cfg vert) with *)
   (* | Pause _ *)
-  (* | Await (_, _, _) -> if (List.length state.records) == 1 then 0 else idx *)
+  (* | Await (_, _, _) -> if (List.length state.records) == 1 then idx else 1 *)
   (* | _ -> idx *)
   in
   pick chosen_idx [] state.records

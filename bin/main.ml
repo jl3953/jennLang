@@ -24,10 +24,10 @@ let read_config_file (filename: string) : config =
 (*Parametrize first*)
 (* TOPOLOGIES = ["LINEAR"; "STAR"; "RING"; "FULL"] *)
 
-let num_servers = 7
-let num_clients = 14
+let num_servers = 8
+let num_clients = 3
 let num_sys_threads = num_servers * 3
-let chain_len = 6
+let chain_len = 7
 let head_idx = 0
 let tail_idx = chain_len - 1
 let topology = "LINEAR"
@@ -187,6 +187,7 @@ let rec generate_cfg_from_stmts (stmts : statement list) (cfg : CFG.t) (last_ver
         local_copy_vert
       | Comment -> generate_cfg_from_stmts rest cfg last_vert
       | Await exp -> CFG.create_vertex cfg (Await(LVar "ret", convert_rhs exp, next_vert))
+      | Print exp -> CFG.create_vertex cfg (Print(convert_rhs exp, next_vert))
     end
 
 and generate_cfg_from_cond_stmts (cond_stmts : cond_stmt list) (cfg : CFG.t) (next : CFG.vertex) : CFG.vertex =

@@ -79,6 +79,7 @@ and statement =
   | ForLoopIn of lhs * rhs * statement list
   | Comment
   | Await of rhs
+  | Print of rhs
 
 type func_def = FuncDef of func_call * type_def * statement list
 
