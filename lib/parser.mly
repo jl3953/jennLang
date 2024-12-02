@@ -47,7 +47,7 @@
 %left BANG
 %left AND
 %left OR
-// %left PLUS MINUS
+%left PLUS MINUS
 %nonassoc EQUALS_EQUALS NOT_EQUALS LEFT_ANGLE_BRACKET RIGHT_ANGLE_BRACKET LEFT_ANGLE_BRACKET_EQUALS RIGHT_ANGLE_BRACKET_EQUALS
 // %left COMMA
 
@@ -179,14 +179,14 @@ literals:
 integer:
   | i = INT
     { Int(i) }
-  | i1 = INT PLUS i2 = INT
+  (*| i1 = INT PLUS i2 = INT
     { Int(i1 + i2) }  
   | i1 = INT MINUS i2 = INT
     { Int(i1 - i2) }
   // | i = INT PLUS PLUS
   //   { Int(i + 1) }
   // | i = INT MINUS MINUS
-  //   { Int(i - 1) }
+  //   { Int(i - 1) }*)
 
 var_init:
   | typ = type_def id = ID EQUALS right_side = right_side
@@ -280,6 +280,10 @@ right_side:
     { RpcCallRHS rpc_call }
   | lo = list_ops
     { lo }
+  | i1 = right_side PLUS i2 = right_side
+    { Plus(i1, i2) }
+  | i1 = right_side MINUS i2 = right_side
+    { Minus(i1, i2) }
   (*| rhs = right_side DOT key = ID
     { FieldAccessRHS(rhs, key) }*)
 
@@ -294,7 +298,8 @@ statement:
     { Return(r) }
   | FOR LEFT_PAREN init = statement SEMICOLON
     cond = right_side SEMICOLON 
-    progress = statement RIGHT_PAREN LEFT_CURLY_BRACE
+    progress = statement RIGHT_PAREN
+    LEFT_CURLY_BRACE
     body = statements
     RIGHT_CURLY_BRACE
     { ForLoop(init, cond, progress, body) }

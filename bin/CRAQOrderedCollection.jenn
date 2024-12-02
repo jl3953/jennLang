@@ -31,11 +31,11 @@ Node {
             db[key] = append(db[key], value);
             is_committed[key] = append(is_committed[key], false);
             idx = len(db[key]) - 1;
-            /*rpc_async_call(successor, Write(key, value));
+            rpc_async_call(successor, Write(key, value));
             
             // doesn't allow for GC, b/c idx changes with that
-            await is_committed[key][idx] == true;*/
-        } /*else if (role == "Mid") {
+            await is_committed[key][idx] == true;
+        } else if (role == "Mid") {
             db[key] = append(db[key], value);
             is_committed[key] = append(is_committed[key], false);
             idx = len(db[key]) - 1;
@@ -50,18 +50,18 @@ Node {
             db[key] = append(db[key], value);
             is_committed[key] = append(is_committed[key], true);
             rpc_async_call(predecessor, AckWrite(key, value));
-        }*/
+        }
     }
     
     func AckWrite(key, value) -> none {
         await inFailover == false;
 
         // assume each value is unique
-        /*for (idx = 0; idx < len(db[key]); idx++) {
+        for (idx = 0; idx < len(db[key]); idx = idx + 1) {
             if (db[key][value] == value) {
                 is_committed[key][idx] = true;
             }
-        }*/
+        }
     }
     
     /* func DeleteNode(deleted_node, new_head, new_tail) -> none {

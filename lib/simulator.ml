@@ -43,6 +43,8 @@ type expr =
   | EGreaterThanEquals of expr * expr
   | EListLen of expr
   | EListAccess of expr * int
+  | EPlus of expr * expr
+  | EMinus of expr * expr
 [@@deriving ord]
 
 type lhs =
@@ -316,6 +318,16 @@ let rec eval (env : record_env) (expr : expr) : value =
               List.nth l idx
         end
       | _ -> failwith "Can't index into something that isn't a list"
+      end
+  | EPlus (e1, e2) ->
+    begin match eval env e1, eval env e2 with
+    | VInt i1, VInt i2 -> VInt (i1 + i2)
+    | _ -> failwith "EPlus eval fail"
+    end
+  | EMinus (e1, e2) ->
+    begin match eval env e1, eval env e2 with
+    | VInt i1, VInt i2 -> VInt (i1 - i2)
+    | _ -> failwith "EMinus eval fail"
     end
 
 let eval_lhs (env : record_env) (lhs : lhs) : lvalue =

@@ -37,6 +37,8 @@ and rhs =
   | Tail of rhs
   | Len of rhs
   | ListAccess of rhs * int
+  | Plus of rhs * rhs
+  | Minus of rhs * rhs
 
 and collection = 
   | MapLit of (string * rhs) list

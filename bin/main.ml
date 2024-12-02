@@ -100,6 +100,8 @@ let rec convert_rhs (rhs : rhs) : Simulator.expr =
   | Tail _ -> failwith "Didn't implement Tail yet"
   | Len ls -> EListLen(convert_rhs ls)
   | ListAccess (ls, idx) -> EListAccess(convert_rhs ls,  idx)
+  | Plus (rhs1, rhs2) -> EPlus(convert_rhs rhs1, convert_rhs rhs2)
+  | Minus (rhs1, rhs2) -> EMinus(convert_rhs rhs1, convert_rhs rhs2)
 
 let convert_lhs(lhs : Ast.lhs) : Simulator.lhs =
   match lhs with 
