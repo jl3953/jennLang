@@ -66,6 +66,8 @@ and token = parse
   | ']' {RIGHT_SQUARE_BRACKET}
   | '+' {PLUS}
   | '-' {MINUS}
+  | "*" {STAR}
+  | '/' {SLASH}
   (*| '.' {DOT}*)
   | ':' {COLON}
   | ';' {SEMICOLON}
@@ -89,6 +91,7 @@ and token = parse
   | "Options" { OPTIONS }
   | "prepend" { PREPEND }
   | "print" { PRINT }
+  | "poll_for_resps" { POLL_FOR_RESPS }
   | "return" { RETURN }
   | "rpc_async_call" { RPC_ASYNC_CALL}
   | "rpc_call" { RPC_CALL }

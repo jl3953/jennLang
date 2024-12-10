@@ -39,6 +39,9 @@ and rhs =
   | ListAccess of rhs * int
   | Plus of rhs * rhs
   | Minus of rhs * rhs
+  | Times of rhs * rhs
+  | Div of rhs * rhs
+  | PollForResps of rhs * rhs
 
 and collection = 
   | MapLit of (string * rhs) list

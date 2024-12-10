@@ -12,16 +12,14 @@ Node {
     int self = 0;
     bool inFailover = false;
 
-    func Read(key) -> Value {
+    func Read(key, idx) -> Value {
         print("Read");
         await inFailover == false;
 
         idx = len(is_committed[key]) - 1;
-        print("idxchangeRead");
-        print(idx);
         if ((role == "Head") || (role == "Mid")) {
             if (is_committed[key][idx] == false) { 
-                return rpc_call(tail, Read(key));
+                return rpc_call(tail, Read(key, 0));
             } else {
                 return db[key][idx];
             }
@@ -30,7 +28,7 @@ Node {
         }
     }
 
-    func Write(key, value) -> none {
+    func Write(key, value, idx) -> none {
         print("Write");
         await inFailover == false;
 
@@ -38,53 +36,48 @@ Node {
             db[key] = append(db[key], value);
             is_committed[key] = append(is_committed[key], false);
             idx = len(db[key]) - 1;
-            print("idxchange");
-            print(idx);
-            rpc_async_call(successor, Write(key, value));
+            rpc_async_call(successor, Write(key, value, idx));
             
             // doesn't allow for GC, b/c idx changes with that
-            print("awaithead");
             await is_committed[key][idx] == true;
         } else if (role == "Mid") {
-            db[key] = append(db[key], value);
-            is_committed[key] = append(is_committed[key], false);
             idx = len(db[key]) - 1;
-            print("idxchangemid");
-            print(idx);
-            rpc_async_call(successor, Write(key, value));
+            if (db[key][idx] > value) {
+                rpc_async_call(predecessor, AckWrite(key, value, 0));
+            } else {
+                db[key] = append(db[key], value);
+                is_committed[key] = append(is_committed[key], false);
+                idx = len(db[key]) - 1;
+                rpc_async_call(successor, Write(key, value, idx));
 
-            // doesn't allow for GC, b/c idx changes with that
-            print("awaitmid");
-            print(idx);
-            await is_committed[key][idx] == true;
-            
-            rpc_async_call(predecessor, AckWrite(key, value));
+                // doesn't allow for GC, b/c idx changes with that
+                await is_committed[key][idx] == true;
+                
+                rpc_async_call(predecessor, AckWrite(key, value, 0));
+            }
         } else {
             // role == "Tail"
-            db[key] = append(db[key], value);
-            is_committed[key] = append(is_committed[key], true);
-            rpc_async_call(predecessor, AckWrite(key, value));
+            idx = len(db[key]) - 1;
+            if (db[key][idx] > value) {
+                rpc_async_call(predecessor, AckWrite(key, value, 0));
+            } else {
+                db[key] = append(db[key], value);
+                is_committed[key] = append(is_committed[key], true);
+                rpc_async_call(predecessor, AckWrite(key, value, 0));
+            }
         }
     }
     
-    func AckWrite(key, value) -> none {
+    func AckWrite(key, value, idx) -> none {
         await inFailover == false;
         print("Ackwrite");
 
         // assume each value is unique
-        for (i = 0; i < len(db[key]); i = i + 1) {
-            print("ichangeAckWrite");
-            print(i);
-            if (db[key][i] == value) {
-                commit_ls = is_committed[key];
-                commit_ls[i] = true;
-                print("after");
-                print(commit_ls[i]);
-            } else {
-                print("didntgetintoifAckWrite");
+        for (idx = 0; idx < len(db[key]); idx = idx + 1) {
+            if (db[key][idx] == value) {
+                is_committed[key][idx] = true;
             }
         }
-        print("doigethereAckWrite");
     }
     
     /* func DeleteNode(deleted_node, new_head, new_tail) -> none {
@@ -216,13 +209,13 @@ Node {
 ClientInterface { 
     
     func read(dest, key) -> int {
-        val = rpc_call(dest, Read(key));
+        val = rpc_call(dest, Read(key, 0));
         return val;
     }
 
     func write(dest, key, val) -> none {
         //dest = head;
-        rpc_call(dest, Write(key, val));
+        rpc_call(dest, Write(key, val, 0));
     }
 
     // don't trigger more than f of f+1

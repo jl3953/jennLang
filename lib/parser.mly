@@ -36,18 +36,22 @@
 %token PLUS
 %token PREPEND
 %token PRINT
+%token POLL_FOR_RESPS 
 %token RETURN
 %token RPC_ASYNC_CALL
 %token RPC_CALL
 %token SEMICOLON
+%token SLASH
+%token STAR
 %token TAIL
 %token QUOTE
 %token EOF
 
-%left LEFT_SQUARE_BRACKET RIGHT_SQUARE_BRACKET
+%left LEFT_SQUARE_BRACKET
 %right BANG
 %left AND
 %left OR
+%left STAR SLASH
 %left PLUS MINUS
 %nonassoc EQUALS_EQUALS NOT_EQUALS LEFT_ANGLE_BRACKET RIGHT_ANGLE_BRACKET LEFT_ANGLE_BRACKET_EQUALS RIGHT_ANGLE_BRACKET_EQUALS
 // %left COMMA
@@ -285,6 +289,12 @@ right_side:
     { Plus(i1, i2) }
   | i1 = right_side MINUS i2 = right_side
     { Minus(i1, i2) }
+  | i1 = right_side STAR i2 = right_side
+    { Times(i1, i2) }
+  | i1 = right_side SLASH i2 = right_side
+    { Div(i1, i2) }
+  | POLL_FOR_RESPS LEFT_PAREN resps = right_side COMMA rhs2 = right_side RIGHT_PAREN
+    { PollForResps(resps, rhs2) }
   (*| rhs = right_side DOT key = ID
     { FieldAccessRHS(rhs, key) }*)
 

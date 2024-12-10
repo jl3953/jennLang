@@ -28,9 +28,10 @@ let num_servers = 8
 let num_clients = 3
 let num_sys_threads = num_servers * 3
 let chain_len = 7
+let fan_out = 3
 let head_idx = 0
 let tail_idx = chain_len - 1
-let topology = "LINEAR"
+let topology = "STAR"
 let data () : (value, value) Hashtbl.t = 
   let tbl = Hashtbl.create 91 in
   Hashtbl.add tbl (VString "birthday") (VInt 214);
@@ -44,10 +45,10 @@ let mod_op (i : int) (m : int): int =
   else
     i mod m
 
-let jenns_birthday_counter = ref 214
+(* let jenns_birthday_counter = ref 214
 let increment_birthday () : int = 
   jenns_birthday_counter := !jenns_birthday_counter + 1;
-  !jenns_birthday_counter
+  !jenns_birthday_counter *)
 
 let global_state = 
   { nodes = Array.init (num_servers + num_clients + num_sys_threads) (fun _ -> Env.create 91) 
@@ -102,6 +103,9 @@ let rec convert_rhs (rhs : rhs) : Simulator.expr =
   | ListAccess (ls, idx) -> EListAccess(convert_rhs ls,  idx)
   | Plus (rhs1, rhs2) -> EPlus(convert_rhs rhs1, convert_rhs rhs2)
   | Minus (rhs1, rhs2) -> EMinus(convert_rhs rhs1, convert_rhs rhs2)
+  | Times (rhs1, rhs2) -> ETimes(convert_rhs rhs1, convert_rhs rhs2)
+  | Div (rhs1, rhs2) -> EDiv(convert_rhs rhs1, convert_rhs rhs2)
+  | PollForResps (collection, rhs2) -> EPollForResps(convert_rhs collection, convert_rhs rhs2)
 
 let convert_lhs(lhs : Ast.lhs) : Simulator.lhs =
   match lhs with 
@@ -359,7 +363,15 @@ let init_topology (topology : string) (global_state : state) (prog : program) : 
     print_endline "init tail";
     (* Hashtbl.iter (fun _ _ -> print_endline "+1") data; *)
     sync_exec global_state prog false false false [] false;
-  | "STAR" -> raise (Failure "Not implemented STAR topology")
+  | "STAR" -> 
+    for i = 0 to num_servers - 1 do
+      schedule_client global_state prog "init" [
+        VNode i (* dest *)
+      ; VNode 0 (* primary *)
+      ; VList (ref (List.init fan_out (fun i -> VNode (i + 1)))) (* backups*)
+      ] 0;
+      sync_exec global_state prog false false false [] false
+    done
   | "RING" -> raise (Failure "Not implemented RING topology")
   | "FULL" -> raise (Failure "Not implemented FULL topology")
   | _ -> raise (Failure "Invalid topology")
@@ -377,7 +389,10 @@ let print_single_node (node : (value Env.t)) =
         Hashtbl.iter (fun k_str v -> 
             let k = match k_str with
               | VString s -> s
-              | _ -> failwith "Key is not a string" in
+              | VInt i -> string_of_int i
+              | VNode n -> "VNode " ^ (string_of_int n)
+              | VBool b -> string_of_bool b
+              | _ -> failwith "Key is not a string, int, node, or bool" in
             match v with
             | VInt i -> print_endline ("\t" ^ k ^ ": " ^ (string_of_int i))
             | VBool b -> print_endline ("\t" ^ k ^ ": " ^ (string_of_bool b)) 
@@ -415,9 +430,11 @@ let interp (spec : string) (intermediate_output : string) (scheduler_config_json
     process_program ast in 
   init_topology topology global_state prog;
 
-  schedule_client global_state prog "write" [VNode 0; VString "birthday"; VInt (increment_birthday())] 0;
+  schedule_client global_state prog "start" [VNode 0] 0;
+
+  (*schedule_client global_state prog "write" [VNode 0; VString "birthday"; VInt (increment_birthday())] 0;
   sync_exec global_state prog false false false [] false;
-  print_endline "wrote 215";
+  print_endline "wrote 215";*)
 
   (* for node = 0 to chain_len do
      schedule_client global_state prog "startFailover" [VNode node] 0;
@@ -440,7 +457,7 @@ let interp (spec : string) (intermediate_output : string) (scheduler_config_json
   (* bootlegged_sync_exec global_state prog false false false true; *)
   (* sync_exec global_state prog false false false true; *)
 
-  let new_chain = [0; 1; 2; 3; 4; 5; 6] in
+  (*let new_chain = [0; 1; 2; 3; 4; 5; 6] in
   let new_chain_len = List.length new_chain in
   let write_call = 1 in 
   let add_node_call = 1 in
@@ -521,7 +538,10 @@ let interp (spec : string) (intermediate_output : string) (scheduler_config_json
           schedule_record global_state prog 
             randomly_drop_msgs cut_tail_from_mid sever_all_to_tail_but_mid partition_away_nodes randomly_delay_msgs
       end
-  done;
+  done;*)
+
+  sync_exec global_state prog 
+    randomly_drop_msgs cut_tail_from_mid sever_all_to_tail_but_mid partition_away_nodes randomly_delay_msgs;
 
   bootlegged_sync_exec global_state prog 
     randomly_drop_msgs cut_tail_from_mid sever_all_to_tail_but_mid partition_away_nodes randomly_delay_msgs;

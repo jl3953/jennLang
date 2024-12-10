@@ -45,6 +45,9 @@ type expr =
   | EListAccess of expr * int
   | EPlus of expr * expr
   | EMinus of expr * expr
+  | ETimes of expr * expr
+  | EDiv of expr * expr
+  | EPollForResps of expr * expr
 [@@deriving ord]
 
 type lhs =
@@ -119,6 +122,52 @@ let to_string(l: 'a label) : string =
   | Cond _ -> "Cond"
   | ForLoopIn _ -> "ForLoopIn"
   | Print _ -> "Print"
+
+let rec to_string_expr (e: expr) : string =
+  match e with 
+  | EVar s -> s
+  | EFind (e1, e2) -> "EFind(" ^ (to_string_expr e1) ^ ", " ^ (to_string_expr e2) ^ ")"
+  | EInt i -> string_of_int i
+  | EBool b -> string_of_bool b
+  | ENot e -> "ENot(" ^ (to_string_expr e) ^ ")"
+  | EAnd (e1, e2) -> "EAnd(" ^ (to_string_expr e1) ^ ", " ^ (to_string_expr e2) ^ ")"
+  | EOr (e1, e2) -> "EOr(" ^ (to_string_expr e1) ^ ", " ^ (to_string_expr e2) ^ ")"
+  | EEqualsEquals (e1, e2) -> "EEqualsEquals(" ^ (to_string_expr e1) ^ ", " ^ (to_string_expr e2) ^ ")"
+  | EMap kvpairs -> "EMap(" ^ (String.concat ", " (List.map (fun (k, v) -> k ^ ": " ^ (to_string_expr v)) kvpairs)) ^ ")"
+  | EList exprs -> "EList(" ^ (String.concat ", " (List.map to_string_expr exprs)) ^ ")"
+  | EListPrepend (e1, e2) -> "EListPrepend(" ^ (to_string_expr e1) ^ ", " ^ (to_string_expr e2) ^ ")"
+  | EListAppend (e1, e2) -> "EListAppend(" ^ (to_string_expr e1) ^ ", " ^ (to_string_expr e2) ^ ")"
+  | EString s -> "\"" ^ s ^ "\""
+  | ELessThan (e1, e2) -> "ELessThan(" ^ (to_string_expr e1) ^ ", " ^ (to_string_expr e2) ^ ")"
+  | ELessThanEquals (e1, e2) -> "ELessThanEquals(" ^ (to_string_expr e1) ^ ", " ^ (to_string_expr e2) ^ ")"
+  | EGreaterThan (e1, e2) -> "EGreaterThan(" ^ (to_string_expr e1) ^ ", " ^ (to_string_expr e2) ^ ")"
+  | EGreaterThanEquals (e1, e2) -> "EGreaterThanEquals(" ^ (to_string_expr e1) ^ ", " ^ (to_string_expr e2) ^ ")"
+  | EListLen e -> "EListLen(" ^ (to_string_expr e) ^ ")"
+  | EListAccess (e, i) -> "EListAccess(" ^ (to_string_expr e) ^ ", " ^ (string_of_int i) ^ ")"
+  | EPlus (e1, e2) -> "EPlus(" ^ (to_string_expr e1) ^ ", " ^ (to_string_expr e2) ^ ")"
+  | EMinus (e1, e2) -> "EMinus(" ^ (to_string_expr e1) ^ ", " ^ (to_string_expr e2) ^ ")"
+  | ETimes (e1, e2) -> "ETimes(" ^ (to_string_expr e1) ^ ", " ^ (to_string_expr e2) ^ ")"
+  | EDiv (e1, e2) -> "EDiv(" ^ (to_string_expr e1) ^ ", " ^ (to_string_expr e2) ^ ")"
+  | EPollForResps (e1, e2) -> "EPollForResps(" ^ (to_string_expr e1) ^ ", " ^ (to_string_expr e2) ^ ")"
+
+let rec to_string_value (v: value) : string =
+  match v with
+  | VInt i -> string_of_int i
+  | VBool b -> string_of_bool b
+  | VMap m -> 
+    "VMap(" ^ (
+      String.concat ", " (
+        List.map (
+          fun (k, v) -> "\t" ^ (to_string_value k) ^ ": " ^ (to_string_value v) ^ "\n"
+        ) 
+          (Hashtbl.fold (
+              fun k v acc -> (k, v) :: acc) m [])) ^ ")")
+  | VList l -> "VList(" ^ (String.concat ", " (List.map to_string_value !l)) ^ ")"
+  | VOption o -> "VOption(" ^ (match o with Some v -> to_string_value v | None -> "None") ^ ")"
+  | VFuture f -> "VFuture(" ^ (match !f with Some v -> to_string_value v | None -> "None") ^ ")"
+  | VNode n -> "VNode(" ^ (string_of_int n) ^ ")"
+  | VString s -> "\"" ^ s ^ "\""
+
 
 module CFG : sig
   type t (* jenndbg: control flow graph type *)
@@ -327,7 +376,8 @@ let rec eval (env : record_env) (expr : expr) : value =
   | EListLen e ->
     begin match eval env e with
       | VList l -> VInt (List.length !l)
-      | _ -> failwith "Can't get length of non-list data structure"
+      | VMap m -> VInt (Hashtbl.length m)
+      | _ -> failwith "EListLen eval fail on non-collection"
     end
   | EListAccess (ls, idx) ->
     begin match eval env ls with
@@ -352,6 +402,68 @@ let rec eval (env : record_env) (expr : expr) : value =
       | VInt i1, VInt i2 -> VInt (i1 - i2)
       | _ -> failwith "EMinus eval fail"
     end
+  | ETimes (e1, e2) ->
+    begin match eval env e1, eval env e2 with
+      | VInt i1, VInt i2 -> VInt (i1 * i2)
+      | _ -> failwith "ETimes eval fail"
+    end
+  | EDiv (e1, e2) ->
+    begin match eval env e1, eval env e2 with
+      | VInt i1, VInt i2 -> VInt (i1 / i2)
+      | _ -> failwith "EDiv eval fail"
+    end
+  | EPollForResps (e1, e2) -> 
+    begin match eval env e1 with
+      | VList list_ref -> 
+        begin match !list_ref with
+          | [] -> failwith "Polling for response on empty list"
+          | _ -> 
+            let rec poll_for_response (lst : value list) : int =
+              begin match lst with
+                | [] -> 0
+                | hd :: tl -> 
+                  begin match hd with
+                    | VFuture fut -> 
+                      begin match !fut with
+                        | Some v -> if (v = eval env e2) then 1 + poll_for_response tl else poll_for_response tl
+                        | None -> poll_for_response tl
+                      end
+                    | VBool b ->
+                      begin match b with
+                        | true -> 1 + poll_for_response tl
+                        | false -> poll_for_response tl
+                      end
+                    | _ -> failwith "Polling for response that isn't a future or bool"
+                  end
+              end in
+            VInt (poll_for_response !list_ref)
+        end
+      | VMap m -> 
+        begin
+          let lst = Hashtbl.fold (fun _ v acc -> v :: acc) m [] in
+          let rec poll_for_response (lst : value list) : int =
+            begin match lst with
+              | [] -> 0
+              | hd :: tl -> 
+                begin match hd with
+                  | VFuture fut -> 
+                    begin match !fut with
+                      | Some v -> if (v = eval env e2) then 1 + poll_for_response tl else poll_for_response tl
+                      | None -> poll_for_response tl
+                    end
+                  | VBool b ->
+                    begin match b with
+                      | true -> 1 + poll_for_response tl
+                      | false -> poll_for_response tl
+                    end
+                  | _ -> failwith "Polling for response that isn't a future or bool in map"
+                end
+            end in
+          VInt (poll_for_response lst)
+        end
+      | _ -> failwith "Polling for response on non-collection"
+    end
+
 
 let eval_lhs (env : record_env) (lhs : lhs) : lvalue =
   match lhs with
@@ -382,19 +494,19 @@ let store (lhs : lhs) (vl : value) (env : record_env) : unit =
           failwith "LVAccess empty list"
         else
           begin
-          let lst = !ref_l in
-          ref_l := List.mapi (fun j x -> if j = i then vl else x) lst;
-          print_endline "derpjenn";
-          print_endline (String.concat ", " (List.map (fun x -> 
-              match x with 
-              | VInt i -> string_of_int i 
-              | VString s -> s
-              | VBool b -> string_of_bool b
-              | VList _ -> "list"
-              | VFuture _ -> "Vfuture"
-              | VNode _ -> "VNode"
-              | VMap _ -> "VMap"
-              | VOption _ -> "VOption") !ref_l))
+            let lst = !ref_l in
+            ref_l := List.mapi (fun j x -> if j = i then vl else x) lst;
+            print_endline "derpjenn";
+            print_endline (String.concat ", " (List.map (fun x -> 
+                match x with 
+                | VInt i -> string_of_int i 
+                | VString s -> s
+                | VBool b -> string_of_bool b
+                | VList _ -> "list"
+                | VFuture _ -> "Vfuture"
+                | VNode _ -> "VNode"
+                | VMap _ -> "VMap"
+                | VOption _ -> "VOption") !ref_l))
           end
       | _ -> failwith "Can't index into a list with non-integer"
     end
@@ -490,7 +602,13 @@ let exec (state : state) (program : program) (record : record)  =
           record.pc <- bthen
         | VBool false ->
           record.pc <- belse
-        | _ -> failwith "Type error!"
+        | VInt _ -> failwith "Type error int"
+        | VFuture _ -> failwith "Type error future"
+        | VMap _ -> failwith "Type error map"
+        | VList _ -> failwith "Type error list"
+        | VOption _ -> failwith "Type error option"
+        | VString _ -> failwith "Type error string"
+        | VNode _ -> failwith "Type error node"
       end;
       loop ()
     | Await (lhs, expr, next) -> 
@@ -515,7 +633,12 @@ let exec (state : state) (program : program) (record : record)  =
             end
           else 
             state.records <- record::state.records
-        | _ -> failwith "Type error!"
+        | VInt _ -> failwith "Type error int"
+        | VMap _ -> failwith "Type error map"
+        | VList _ -> failwith "Type error list"
+        | VOption _ -> failwith "Type error option"
+        | VString _ -> failwith "Type error string"
+        | VNode _ -> failwith "Type error node"
       end
     | Return expr -> 
       record.continuation (eval env expr)
@@ -550,19 +673,41 @@ let exec (state : state) (program : program) (record : record)  =
                 loop () 
               | _ -> failwith "Cannot iterate through map with anything other than a 2-tuple"
             end
-        | _ -> failwith "Type error!"
+        | VList list_ref -> 
+          (* First remove the pair being processed from the map. *)
+          if (List.length !list_ref) == 0 then 
+            begin
+              record.pc <- next;
+              loop()
+            end
+          else
+            let removed_item = 
+              let result_ref = ref None in List.iter (fun item ->
+                  match !result_ref with
+                    Some _ -> ()  (* We already found an item, so do nothing *)
+                  | None -> result_ref := Some item
+                ) !list_ref;
+              !result_ref in
+            list_ref := List.filter (fun x -> x <> (Option.get removed_item)) !list_ref;
+            store (LVar "local_copy") (VList list_ref) env;
+            begin match lhs with
+              | LVar var -> 
+                Env.add env.node_env var (Option.get removed_item);
+                record.pc <- body;
+                loop ()
+              | LAccess _ -> failwith "Cannot iterate through list with anything other than a variable LAccess"
+              | LTuple _ -> failwith "Cannot iterate through list with anything other than a variable LTuple"
+            end
+        | VInt _ -> failwith "Type error VInt"
+        | VBool _ -> failwith "Type error VBool"
+        | VString _ -> failwith "Type error VString"
+        | VNode _ -> failwith "Type error VNode"
+        | VOption _ -> failwith "Type error VOption"
+        | VFuture _ -> failwith "Type error VFuture"
       end
     | Print (expr, next) -> 
-      Printf.printf "%s\n" (match eval env expr with
-          | VInt i -> string_of_int i
-          | VBool b -> string_of_bool b
-          | VString s -> s
-          | VNode n -> string_of_int n
-          | VMap _ -> "map"
-          | VList _ -> "list"
-          | VOption _ -> "option"
-          | VFuture _ -> "future"
-        );
+      let v = eval env expr in
+      Printf.printf "%s\n" (to_string_value v);
       record.pc <- next;
       loop ()
   in
