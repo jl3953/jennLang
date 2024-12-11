@@ -367,8 +367,9 @@ let init_topology (topology : string) (global_state : state) (prog : program) : 
     for i = 0 to num_servers - 1 do
       schedule_client global_state prog "init" [
         VNode i (* dest *)
-      ; VNode 0 (* primary *)
-      ; VList (ref (List.init fan_out (fun i -> VNode (i + 1)))) (* backups*)
+      (* ; VNode 0 primary *)
+      (* ; VList (ref (List.init fan_out (fun i -> VNode (i + 1)))) backups *)
+      ; VList (ref (List.init fan_out (fun i -> VNode (i))))
       ] 0;
       sync_exec global_state prog false false false [] false
     done
@@ -377,35 +378,8 @@ let init_topology (topology : string) (global_state : state) (prog : program) : 
   | _ -> raise (Failure "Invalid topology")
 
 let print_single_node (node : (value Env.t)) = 
-  Env.iter (fun key value ->
-      match value with 
-      | VInt i -> print_endline (key ^ ": " ^ (string_of_int i))
-      | VBool b -> print_endline (key ^ ": " ^ (string_of_bool b))
-      | VString s -> print_endline (key ^ ": " ^ s)
-      | VNode n -> print_endline (key ^ ": " ^ (string_of_int n))
-      | VFuture _ -> print_endline (key ^ ": VFuture")
-      | VMap m -> 
-        print_endline (key ^ ": VMap iterations");
-        Hashtbl.iter (fun k_str v -> 
-            let k = match k_str with
-              | VString s -> s
-              | VInt i -> string_of_int i
-              | VNode n -> "VNode " ^ (string_of_int n)
-              | VBool b -> string_of_bool b
-              | _ -> failwith "Key is not a string, int, node, or bool" in
-            match v with
-            | VInt i -> print_endline ("\t" ^ k ^ ": " ^ (string_of_int i))
-            | VBool b -> print_endline ("\t" ^ k ^ ": " ^ (string_of_bool b)) 
-            | VString s -> print_endline ("\t" ^ k ^ ": " ^ s)
-            | VNode n -> print_endline ("\t" ^ k ^ ": " ^ (string_of_int n))
-            | VFuture _ -> print_endline ("\t" ^ k ^ ": VFuture")
-            | VMap _ -> print_endline ("\t" ^ k ^ ": VMap")
-            | VOption _ -> print_endline ("\t" ^ k ^ ": VOptions")
-            | VList _ -> print_endline ("\t" ^ k ^ ": VList")
-          ) m;
-      | VOption _ -> print_endline (key ^ ": VOptions")
-      | VList _ -> print_endline (key ^ ": VList")
-    ) node
+  Env.iter (fun key value -> 
+    Printf.printf "%s: %s\n" key (to_string_value value)) node
 
 let print_global_nodes (nodes : (value Env.t) array) = 
   Array.iter (fun node ->
@@ -430,7 +404,7 @@ let interp (spec : string) (intermediate_output : string) (scheduler_config_json
     process_program ast in 
   init_topology topology global_state prog;
 
-  schedule_client global_state prog "start" [VNode 0] 0;
+  (* schedule_client global_state prog "start" [VNode 0] 0; *)
 
   (*schedule_client global_state prog "write" [VNode 0; VString "birthday"; VInt (increment_birthday())] 0;
   sync_exec global_state prog false false false [] false;

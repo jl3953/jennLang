@@ -1,0 +1,69 @@
+Node {
+    int self = 0;
+    int primary = 0;
+    
+    map<int, int> backups = {};
+
+    func Start() -> None {
+
+        if (self == primary) {
+            recvd = {};
+            for (bk_node in backups) {
+                print("asynccall");
+                recvd[bk_node] = rpc_async_call(bk_node, Ping());
+            }
+
+            majority = 1 + len(recvd) / 2;
+            print(majority);
+            print(recvd);
+            print(poll_for_resps(recvd, true));
+            print("u______________");
+            await (poll_for_resps(recvd, true) == majority);
+            print(recvd);
+            print("t______________");
+        }
+
+    }
+
+    func Ping() -> Bool {
+        return true;
+    }
+
+    func Recvd(count) -> Int {
+        count = 0;
+        for (bk in recvd) {
+            if (recvd[bk] == true) {
+                count = count + 1;
+            }
+        }
+        return count;
+    }
+
+    func Init(me, primary_node, backup_nodes) -> none {
+        self = me;
+        primary = primary_node;
+        backups = [];
+        
+        if (self == primary) {
+            for (bk in backup_nodes) {
+                backups = append(backups, bk);
+            }
+        }
+    }
+}
+
+ClientInterface { 
+    
+    func start(primary) -> none {
+        rpc_call(primary, Start());
+    }
+
+    func recvd(primary) -> int {
+        count = rpc_call(primary, Recvd(0));
+        return count;
+    }
+
+    func init(dest, primary, backups) -> none {
+        rpc_call(dest, Init(dest, primary, backups));
+    }
+}

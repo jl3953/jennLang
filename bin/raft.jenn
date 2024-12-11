@@ -1,0 +1,45 @@
+Node {
+
+    // persistent state
+    int self = 0;
+    int currentTerm = 0;
+    int votedFor = 0;
+    List log_command = [];
+    List log_term = [];
+    List replicas = [];
+
+    // volatile state on servers
+    int commitIndex = 0;
+    int lastApplied = 0;
+
+    List nextIndex = [];
+    List matchIndex = [];
+
+    func Init(me, peers) -> none {
+        self = me;
+        currentTerm = 0;
+        votedFor = -1;
+        log_command = ["idx0"];
+        log_term = [-1];
+
+        commitIndex = 0;
+        lastApplied = 0;
+
+        nextIndex = [];
+        matchIndex = [];
+        replicas = [];
+        for (i = 0; i < len(peers); i = i+1) {
+            matchIndex = append(matchIndex, 0);
+            replicas = append(replicas, i);
+        }
+    }
+
+}
+
+ClientInterface{
+    
+    func init(dest, replicas) -> none {
+        rpc_call(dest, Init(dest, replicas));
+    }
+
+}

@@ -184,6 +184,8 @@ literals:
 integer:
   | i = INT
     { Int(i) }
+  | MINUS i = INT
+    { Int(-i) }
   (*| i1 = INT PLUS i2 = INT
     { Int(i1 + i2) }  
   | i1 = INT MINUS i2 = INT
