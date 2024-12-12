@@ -15,6 +15,8 @@ Node {
     List nextIndex = [];
     List matchIndex = [];
 
+    string state = "FOLLOWER";
+
     func Init(me, peers) -> none {
         self = me;
         currentTerm = 0;
@@ -28,10 +30,38 @@ Node {
         nextIndex = [];
         matchIndex = [];
         replicas = [];
+
+        state = "FOLLOWER";
+
         for (i = 0; i < len(peers); i = i+1) {
             matchIndex = append(matchIndex, 0);
             replicas = append(replicas, i);
         }
+    }
+
+    func BeginElection() -> none {
+        currentTerm = currentTerm + 1;
+        state = "CANDIDATE";
+        votedFor = self;
+
+        replies = {};
+        for (peer in replicas) {
+            if (peer != self) {
+                replies[peer] = rpc_async_call(peer, RequestVote());
+            }
+        }
+
+        quorum = 1 - 1 + len(replicas) / 2; // vote for self counts
+        await (poll_for_resps(replies, true) == quorum) || (poll_for_resps(replies, false) == quorum);
+
+    }
+
+    func RequestVote() -> bool {
+        return true;
+    }
+
+    func Heartbeat() -> none {
+        temp = 1;
     }
 
 }
@@ -40,6 +70,10 @@ ClientInterface{
     
     func init(dest, replicas) -> none {
         rpc_call(dest, Init(dest, replicas));
+    }
+
+    func beginElection(dest) -> none {
+        rpc_call(dest, BeginElection());
     }
 
 }
