@@ -323,7 +323,26 @@ let rec eval (env : record_env) (expr : expr) : value =
       | VBool b1, VBool b2 -> VBool (b1 = b2)
       | VString s1, VString s2 -> VBool (s1 = s2)
       | VNode n1, VNode n2 -> VBool (n1 = n2)
-      | _ -> failwith "EEqualsEquals eval fail"
+      | VNode n, VInt i -> VBool (n = i)
+      | VInt i, VNode n -> VBool (i = n)
+      | VMap _, _ -> failwith "EEqualsEquals fails with map"
+      | VFuture _, _ -> failwith "EEqualsEquals fails with VFuture"
+      | VList _, _ -> failwith "EEqualsEquals fails with list"
+      | VOption _, _ -> failwith "EEqualsEquals fails with option"
+      | VInt i, other -> 
+        begin match other with
+        | VInt _ -> failwith "EEqualsEquals eval fail VInt, VInt"
+        | VBool _-> failwith "EEqualsEquals eval fail VInt, VBool"
+        | VString _-> failwith "EEqualsEquals eval fail VInt, VString"
+        | VNode n -> Printf.printf "VInt %d, VNode %d\n" i n; failwith "EEqualsEquals eval fail VInt, VNode"
+        | VMap _-> failwith "EEqualsEquals eval fail VInt, VMap"
+        | VFuture _-> failwith "EEqualsEquals eval fail VInt, VFuture"
+        | VList _-> failwith "EEqualsEquals eval fail VInt, VList"
+        | VOption _-> failwith "EEqualsEquals eval fail VInt, VOption"
+        end
+      | VBool _, _ -> failwith "EEqualsEquals eval fail VBool"
+      | VString _, _ -> failwith "EEqualsEquals eval fail VString"
+      | VNode _, _ -> failwith "EEqualsEquals eval fail VNode"
     end
   | EMap kvpairs -> 
     let rec makemap (kvpairs : (string * expr) list) : (value, value) Hashtbl.t =

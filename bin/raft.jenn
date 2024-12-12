@@ -35,7 +35,7 @@ Node {
 
         for (i = 0; i < len(peers); i = i+1) {
             matchIndex = append(matchIndex, 0);
-            replicas = append(replicas, i);
+            replicas = append(replicas, peers[i]);
         }
     }
 
@@ -45,20 +45,42 @@ Node {
         votedFor = self;
 
         replies = {};
-        for (peer in replicas) {
+        for (i = 0; i < len(replicas); i = i+1) {
+            peer = replicas[i];
             if (peer != self) {
-                replies[peer] = rpc_async_call(peer, RequestVote());
+                replies[peer] = rpc_async_call(peer, RequestVote(currentTerm, self, -1, -1));
             }
         }
 
         copyCurrentTerm = currentTerm;
         quorum = 1 - 1 + len(replicas) / 2; // vote for self counts
-        await (poll_for_resps(replies, true) == quorum) || (votedFor != self) || (currentTerm != copyCurrentTerm);
+        await poll_for_resps(replies, {term: currentTerm, voteGranted: true}) == quorum;
+        //await (poll_for_resps(replies, {term: currentTerm, voteGranted: true}) == quorum) || (votedFor != self) || (currentTerm != copyCurrentTerm);
+
+        if (poll_for_resps(replies, {term: currentTerm, voteGranted: true}) == quorum) {
+            state = "LEADER";
+        }
 
     }
 
-    func RequestVote() -> bool {
-        return true;
+    func RequestVote(term, candidateId, lastLogIndx, lastLogTerm) -> Map {
+        if (term < currentTerm) {
+            return {term: currentTerm, voteGranted: false};
+        } else if (votedFor == -1 || votedFor == candidateId) {
+            state = "FOLLOWER";
+            votedFor = candidateId;
+            if (term > currentTerm) {
+                currentTerm = term;
+                state = "FOLLOWER";
+            }
+            return {term: term, voteGranted: true};
+        } else {
+            if (term > currentTerm) {
+                currentTerm = term;
+                state = "FOLLOWER";
+            }
+            return {term: -1, voteGranted: false};
+        }
     }
 
     func Heartbeat() -> none {
