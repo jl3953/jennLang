@@ -39,7 +39,7 @@ Node {
         }
     }
 
-    func BeginElection() -> none {
+    func BeginElection(replies, peer, quorum, copyCurrentTerm) -> none {
         currentTerm = currentTerm + 1;
         state = "CANDIDATE";
         votedFor = self;
@@ -51,8 +51,9 @@ Node {
             }
         }
 
+        copyCurrentTerm = currentTerm;
         quorum = 1 - 1 + len(replicas) / 2; // vote for self counts
-        await (poll_for_resps(replies, true) == quorum) || (poll_for_resps(replies, false) == quorum);
+        await (poll_for_resps(replies, true) == quorum) || (votedFor != self) || (currentTerm != copyCurrentTerm);
 
     }
 
@@ -73,7 +74,7 @@ ClientInterface{
     }
 
     func beginElection(dest) -> none {
-        rpc_call(dest, BeginElection());
+        rpc_call(dest, BeginElection({}, 0, 0, 0));
     }
 
 }
