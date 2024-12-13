@@ -107,21 +107,6 @@ type 'a label =
   | ForLoopIn of lhs * expr * 'a * 'a
   | Print of expr * 'a
 
-let to_string(l: 'a label) : string =
-  match l with
-  | Instr (i, _) -> 
-    begin
-      match i with 
-      | Async (_, _, f, _) -> "instr async to " ^ f
-      | Assign (_, _) -> "instr assign"
-      | Copy (_, _) -> "instr copy"
-    end
-  | Pause _ -> "Pause"
-  | Await _ -> "Await"
-  | Return _ -> "Return"
-  | Cond _ -> "Cond"
-  | ForLoopIn _ -> "ForLoopIn"
-  | Print _ -> "Print"
 
 let rec to_string_expr (e: expr) : string =
   match e with 
@@ -149,6 +134,28 @@ let rec to_string_expr (e: expr) : string =
   | ETimes (e1, e2) -> "ETimes(" ^ (to_string_expr e1) ^ ", " ^ (to_string_expr e2) ^ ")"
   | EDiv (e1, e2) -> "EDiv(" ^ (to_string_expr e1) ^ ", " ^ (to_string_expr e2) ^ ")"
   | EPollForResps (e1, e2) -> "EPollForResps(" ^ (to_string_expr e1) ^ ", " ^ (to_string_expr e2) ^ ")"
+
+let to_string_lhs (l: lhs) : string =
+  match l with
+  | LVar s -> s
+  | LAccess (e1, e2) -> (to_string_expr e1) ^ "[" ^ (to_string_expr e2) ^ "]"
+  | LTuple lst -> "(" ^ (String.concat ", " lst) ^ ")"
+
+let to_string(l: 'a label) : string =
+  match l with
+  | Instr (i, _) -> 
+    begin
+      match i with 
+      | Async (_, _, f, _) -> "instr async to " ^ f
+      | Assign (lhs, expr) -> "Instr(Assign(" ^ to_string_lhs lhs ^ ", " ^ (to_string_expr expr) ^ "))"
+      | Copy (_, _) -> "instr copy"
+    end
+  | Pause _ -> "Pause"
+  | Await (lhs, expr, _) -> "Await(" ^ (to_string_lhs lhs) ^ ", " ^ (to_string_expr expr) ^ ")"
+  | Return _ -> "Return"
+  | Cond _ -> "Cond"
+  | ForLoopIn _ -> "ForLoopIn"
+  | Print _ -> "Print"
 
 let rec to_string_value (v: value) : string =
   match v with
@@ -331,14 +338,14 @@ let rec eval (env : record_env) (expr : expr) : value =
       | VOption _, _ -> failwith "EEqualsEquals fails with option"
       | VInt i, other -> 
         begin match other with
-        | VInt _ -> failwith "EEqualsEquals eval fail VInt, VInt"
-        | VBool _-> failwith "EEqualsEquals eval fail VInt, VBool"
-        | VString _-> failwith "EEqualsEquals eval fail VInt, VString"
-        | VNode n -> Printf.printf "VInt %d, VNode %d\n" i n; failwith "EEqualsEquals eval fail VInt, VNode"
-        | VMap _-> failwith "EEqualsEquals eval fail VInt, VMap"
-        | VFuture _-> failwith "EEqualsEquals eval fail VInt, VFuture"
-        | VList _-> failwith "EEqualsEquals eval fail VInt, VList"
-        | VOption _-> failwith "EEqualsEquals eval fail VInt, VOption"
+          | VInt _ -> failwith "EEqualsEquals eval fail VInt, VInt"
+          | VBool _-> failwith "EEqualsEquals eval fail VInt, VBool"
+          | VString _-> failwith "EEqualsEquals eval fail VInt, VString"
+          | VNode n -> Printf.printf "VInt %d, VNode %d\n" i n; failwith "EEqualsEquals eval fail VInt, VNode"
+          | VMap _-> failwith "EEqualsEquals eval fail VInt, VMap"
+          | VFuture _-> failwith "EEqualsEquals eval fail VInt, VFuture"
+          | VList _-> failwith "EEqualsEquals eval fail VInt, VList"
+          | VOption _-> failwith "EEqualsEquals eval fail VInt, VOption"
         end
       | VBool _, _ -> failwith "EEqualsEquals eval fail VBool"
       | VString _, _ -> failwith "EEqualsEquals eval fail VString"
@@ -827,6 +834,11 @@ let schedule_record (state : state) (program : program)
   (* | Await (_, _, _) -> if (List.length state.records) == 1 then idx else 1 *)
   (* | _ -> idx *)
   in
+  Printf.printf "chosen_idx %d, len(state.records) %d\n" chosen_idx (List.length state.records);
+  begin
+  if List.length state.records == 2 then
+      List.iter (fun r -> Printf.printf "node %d, pc %s\n" r.node (to_string (CFG.label program.cfg r.pc))) state.records
+  end;
   pick chosen_idx [] state.records
 
 (* Choose a client without a pending operation, create a new activation record

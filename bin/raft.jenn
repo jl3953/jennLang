@@ -54,7 +54,16 @@ Node {
 
         copyCurrentTerm = currentTerm;
         quorum = 1 - 1 + len(replicas) / 2; // vote for self counts
+        for (derp = 0; derp < 10; derp = derp + 1) {
+            hee = poll_for_resps(replies, {term: currentTerm, voteGranted: true});
+            if (hee != quorum) {
+                print(hee);
+                print(replies);
+            }
+        }
         await poll_for_resps(replies, {term: currentTerm, voteGranted: true}) == quorum;
+        //print(poll_for_resps(replies, {term: currentTerm, voteGranted: true}) == quorum);
+        //print(votedFor != self);
         //await (poll_for_resps(replies, {term: currentTerm, voteGranted: true}) == quorum) || (votedFor != self) || (currentTerm != copyCurrentTerm);
 
         if (poll_for_resps(replies, {term: currentTerm, voteGranted: true}) == quorum) {

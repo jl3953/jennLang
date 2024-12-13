@@ -24,10 +24,10 @@ let read_config_file (filename: string) : config =
 (*Parametrize first*)
 (* TOPOLOGIES = ["LINEAR"; "STAR"; "RING"; "FULL"] *)
 
-let num_servers = 8
+let num_servers = 3
 let num_clients = 3
 let num_sys_threads = num_servers * 3
-let chain_len = 7
+let chain_len = 3
 let fan_out = 3
 let head_idx = 0
 let tail_idx = chain_len - 1
@@ -516,8 +516,8 @@ let interp (spec : string) (intermediate_output : string) (scheduler_config_json
       end
   done;*)
 
-  sync_exec global_state prog 
-    randomly_drop_msgs cut_tail_from_mid sever_all_to_tail_but_mid partition_away_nodes randomly_delay_msgs;
+  (* sync_exec global_state prog 
+    randomly_drop_msgs cut_tail_from_mid sever_all_to_tail_but_mid partition_away_nodes randomly_delay_msgs; *)
 
   bootlegged_sync_exec global_state prog 
     randomly_drop_msgs cut_tail_from_mid sever_all_to_tail_but_mid partition_away_nodes randomly_delay_msgs;
