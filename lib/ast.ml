@@ -42,6 +42,8 @@ and rhs =
   | Times of rhs * rhs
   | Div of rhs * rhs
   | PollForResps of rhs * rhs
+  | PollForAnyResp of rhs
+  | NextResp of rhs
 
 and collection = 
   | MapLit of (string * rhs) list

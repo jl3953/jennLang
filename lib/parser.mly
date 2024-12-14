@@ -37,6 +37,8 @@
 %token PREPEND
 %token PRINT
 %token POLL_FOR_RESPS 
+%token POLL_FOR_ANY_RESP
+%token NEXT_RESP
 %token RETURN
 %token RPC_ASYNC_CALL
 %token RPC_CALL
@@ -297,6 +299,10 @@ right_side:
     { Div(i1, i2) }
   | POLL_FOR_RESPS LEFT_PAREN resps = right_side COMMA rhs2 = right_side RIGHT_PAREN
     { PollForResps(resps, rhs2) }
+  | POLL_FOR_ANY_RESP LEFT_PAREN resps = right_side RIGHT_PAREN
+    { PollForAnyResp(resps) }
+  | NEXT_RESP LEFT_PAREN resps = right_side RIGHT_PAREN
+    { NextResp(resps) }
   (*| rhs = right_side DOT key = ID
     { FieldAccessRHS(rhs, key) }*)
 

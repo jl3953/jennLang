@@ -92,6 +92,8 @@ and token = parse
   | "prepend" { PREPEND }
   | "print" { PRINT }
   | "poll_for_resps" { POLL_FOR_RESPS }
+  | "has_next_resp" { POLL_FOR_ANY_RESP }
+  | "next_resp" { NEXT_RESP}
   | "return" { RETURN }
   | "rpc_async_call" { RPC_ASYNC_CALL}
   | "rpc_call" { RPC_CALL }

@@ -48,6 +48,8 @@ type expr =
   | ETimes of expr * expr
   | EDiv of expr * expr
   | EPollForResps of expr * expr
+  | EPollForAnyResp of expr
+  | ENextResp of expr
 [@@deriving ord]
 
 type lhs =
@@ -134,6 +136,8 @@ let rec to_string_expr (e: expr) : string =
   | ETimes (e1, e2) -> "ETimes(" ^ (to_string_expr e1) ^ ", " ^ (to_string_expr e2) ^ ")"
   | EDiv (e1, e2) -> "EDiv(" ^ (to_string_expr e1) ^ ", " ^ (to_string_expr e2) ^ ")"
   | EPollForResps (e1, e2) -> "EPollForResps(" ^ (to_string_expr e1) ^ ", " ^ (to_string_expr e2) ^ ")"
+  | EPollForAnyResp e -> "EPollForAnyResp(" ^ (to_string_expr e) ^ ")"
+  | ENextResp e -> "NextResp(" ^ (to_string_expr e) ^ ")"
 
 let to_string_lhs (l: lhs) : string =
   match l with
@@ -491,6 +495,80 @@ let rec eval (env : record_env) (expr : expr) : value =
         end
       | _ -> failwith "Polling for response on non-collection"
     end
+  | EPollForAnyResp rhs -> 
+    begin
+      match eval env rhs with
+      | VList list_ref -> 
+        begin match !list_ref with
+          | [] -> VBool false
+          | _ -> 
+            let rec poll_for_response (lst : value list) : bool =
+              begin match lst with
+                | [] -> failwith "Polling for response on empty list"
+                | hd :: tl -> 
+                  begin match hd with
+                    | VFuture fut -> 
+                      begin match !fut with
+                        | Some _ -> true
+                        | None -> poll_for_response tl
+                      end
+                    | VBool b ->
+                      begin match b with
+                        | true -> true
+                        | false -> poll_for_response tl
+                      end
+                    | _ -> failwith "Polling for response that isn't a future or bool"
+                  end
+              end in
+            VBool (poll_for_response !list_ref)
+        end
+      | VMap m -> 
+        begin
+          let folded_map = Hashtbl.fold (fun _ v acc -> v :: acc) m [] in
+          let rec poll_for_response (lst : value list) : bool =
+            begin match lst with
+              | [] -> false 
+              | hd :: tl -> 
+                begin match hd with
+                  | VFuture fut -> 
+                    begin match !fut with
+                      | Some _ -> true
+                      | None -> poll_for_response tl
+                    end
+                  | VBool b ->
+                    begin match b with
+                      | true -> true
+                      | false -> poll_for_response tl
+                    end
+                  | _ -> failwith "Polling for response that isn't a future or bool in map"
+                end
+            end in
+          VBool (poll_for_response folded_map)
+        end
+      | _ -> failwith "Polling for response on non-collection"
+    end
+  | ENextResp e ->
+    begin match eval env e with 
+      | VMap m ->
+        let folded_map = Hashtbl.fold (fun k v acc -> (k, v) :: acc) m [] in
+        let rec nxt_resp (lst : (value * value) list) : value =
+          begin match lst with
+            | [] -> failwith "No responses in map"
+            | hd :: tl -> 
+              let key, value = hd in
+              match value with 
+              | VFuture fut -> 
+                begin match !fut with
+                  | Some v -> Hashtbl.replace m key (VFuture (ref None)); v
+                  | None -> nxt_resp tl
+                end
+              | _ -> failwith "ENextResp on non-future"
+          end
+        in nxt_resp folded_map
+      | _ -> failwith "ENextResp on non-collection"
+
+    end
+
 
 
 let eval_lhs (env : record_env) (lhs : lhs) : lvalue =
@@ -838,7 +916,7 @@ let schedule_record (state : state) (program : program)
   in
   Printf.printf "chosen_idx %d, len(state.records) %d\n" chosen_idx (List.length state.records);
   begin
-  if List.length state.records >= 2 then
+    if List.length state.records >= 2 then
       List.iter (fun r -> Printf.printf "node %d, pc %s\n" r.node (to_string (CFG.label program.cfg r.pc))) state.records
   end;
   pick chosen_idx [] state.records

@@ -106,6 +106,8 @@ let rec convert_rhs (rhs : rhs) : Simulator.expr =
   | Times (rhs1, rhs2) -> ETimes(convert_rhs rhs1, convert_rhs rhs2)
   | Div (rhs1, rhs2) -> EDiv(convert_rhs rhs1, convert_rhs rhs2)
   | PollForResps (collection, rhs2) -> EPollForResps(convert_rhs collection, convert_rhs rhs2)
+  | PollForAnyResp collection -> EPollForAnyResp(convert_rhs collection)
+  | NextResp collection -> ENextResp(convert_rhs collection)
 
 let convert_lhs(lhs : Ast.lhs) : Simulator.lhs =
   match lhs with 
@@ -406,7 +408,7 @@ let interp (spec : string) (intermediate_output : string) (scheduler_config_json
 
   (* schedule_client global_state prog "start" [VNode 0] 0; *)
 
-  schedule_client global_state prog "beginElection" [VNode 0] 0;
+  schedule_client global_state prog "beginElection" [VNode 1] 0;
 
   (*schedule_client global_state prog "write" [VNode 0; VString "birthday"; VInt (increment_birthday())] 0;
   sync_exec global_state prog false false false [] false;

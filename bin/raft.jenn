@@ -54,27 +54,42 @@ Node {
 
         copyCurrentTerm = currentTerm;
         quorum = 1 - 1 + len(replicas) / 2; // vote for self counts
-        for (derp = 0; derp < 10; derp = derp + 1) {
-            hee = poll_for_resps(replies, {term: currentTerm, voteGranted: true});
-            if (hee != quorum) {
-                print(hee);
-                print(replies);
+
+        resps_recvd = 0;
+        votes = 1;
+        for (placeholder = 0; resps_recvd < len(replies); placeholder = placeholder + 1) {
+
+            await has_next_resp(replies) || (state != "CANDIDATE") || (currentTerm != copyCurrentTerm);
+
+            if ((state != "CANDIDATE") || (currentTerm != copyCurrentTerm)) {
+                // election failed or already restarted
+                return 0;
+            }
+
+            resps_recvd = resps_recvd + 1;
+            any = next_resp(replies);
+            if (any["term"] > currentTerm) {
+                state = "FOLLOWER";
+                return 0;
+            } else if (any["voteGranted"]) {
+                votes = votes + 1;
+                if (votes >= quorum) {
+                    state = "LEADER";
+                    return 0;
+                } 
             }
         }
-        print("WOAHJENN");
-        print(quorum);
-        print(poll_for_resps(replies, {term: currentTerm, voteGranted: true}) >= quorum);
-        await (poll_for_resps(replies, {term: currentTerm, voteGranted: true}) >= quorum) || (votedFor != self) || (currentTerm != copyCurrentTerm);
 
-        if (poll_for_resps(replies, {term: currentTerm, voteGranted: true}) >= quorum) {
-            state = "LEADER";
-        }
-
+        // election failed, restart the election
+        BeginElection({}, 0, 0, 0);
     }
 
     func RequestVote(term, candidateId, lastLogIndx, lastLogTerm) -> Map {
         if (term < currentTerm) {
-            return {term: currentTerm, voteGranted: false};
+            resp = {};
+            resp["term"] = currentTerm;
+            resp["voteGranted"] = false;
+            return resp;
         } else if (votedFor == -1 || votedFor == candidateId) {
             state = "FOLLOWER";
             votedFor = candidateId;
@@ -83,13 +98,19 @@ Node {
                 currentTerm = term;
                 state = "FOLLOWER";
             }
-            return {term: term, voteGranted: true};
+            resp = {};
+            resp["term"] = term;
+            resp["voteGranted"] = true;
+            return resp;
         } else {
             if (term > currentTerm) {
                 currentTerm = term;
                 state = "FOLLOWER";
             }
-            return {term: -1, voteGranted: false};
+            resp = {};
+            resp["term"] = -1;
+            resp["voteGranted"] = false;
+            return resp;
         }
     }
 
