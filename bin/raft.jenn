@@ -61,12 +61,12 @@ Node {
                 print(replies);
             }
         }
-        await poll_for_resps(replies, {term: currentTerm, voteGranted: true}) == quorum;
-        //print(poll_for_resps(replies, {term: currentTerm, voteGranted: true}) == quorum);
-        //print(votedFor != self);
-        //await (poll_for_resps(replies, {term: currentTerm, voteGranted: true}) == quorum) || (votedFor != self) || (currentTerm != copyCurrentTerm);
+        print("WOAHJENN");
+        print(quorum);
+        print(poll_for_resps(replies, {term: currentTerm, voteGranted: true}) >= quorum);
+        await (poll_for_resps(replies, {term: currentTerm, voteGranted: true}) >= quorum) || (votedFor != self) || (currentTerm != copyCurrentTerm);
 
-        if (poll_for_resps(replies, {term: currentTerm, voteGranted: true}) == quorum) {
+        if (poll_for_resps(replies, {term: currentTerm, voteGranted: true}) >= quorum) {
             state = "LEADER";
         }
 
@@ -78,6 +78,7 @@ Node {
         } else if (votedFor == -1 || votedFor == candidateId) {
             state = "FOLLOWER";
             votedFor = candidateId;
+            currentTerm = term;
             if (term > currentTerm) {
                 currentTerm = term;
                 state = "FOLLOWER";

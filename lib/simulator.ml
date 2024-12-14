@@ -153,7 +153,7 @@ let to_string(l: 'a label) : string =
   | Pause _ -> "Pause"
   | Await (lhs, expr, _) -> "Await(" ^ (to_string_lhs lhs) ^ ", " ^ (to_string_expr expr) ^ ")"
   | Return _ -> "Return"
-  | Cond _ -> "Cond"
+  | Cond (expr, _, _)-> "Cond(" ^ (to_string_expr expr) ^ ", _, _)"
   | ForLoopIn _ -> "ForLoopIn"
   | Print _ -> "Print"
 
@@ -438,7 +438,7 @@ let rec eval (env : record_env) (expr : expr) : value =
       | VInt i1, VInt i2 -> VInt (i1 / i2)
       | _ -> failwith "EDiv eval fail"
     end
-  | EPollForResps (e1, e2) -> 
+  | EPollForResps (e1, _) -> 
     begin match eval env e1 with
       | VList list_ref -> 
         begin match !list_ref with
@@ -451,7 +451,8 @@ let rec eval (env : record_env) (expr : expr) : value =
                   begin match hd with
                     | VFuture fut -> 
                       begin match !fut with
-                        | Some v -> if (v = eval env e2) then 1 + poll_for_response tl else poll_for_response tl
+                        (* | Some v -> if (v = eval env e2) then 1 + poll_for_response tl else poll_for_response tl *)
+                        | Some _ -> 1 + poll_for_response tl
                         | None -> poll_for_response tl
                       end
                     | VBool b ->
@@ -474,7 +475,8 @@ let rec eval (env : record_env) (expr : expr) : value =
                 begin match hd with
                   | VFuture fut -> 
                     begin match !fut with
-                      | Some v -> if (v = eval env e2) then 1 + poll_for_response tl else poll_for_response tl
+                      (* | Some v -> if (v = eval env e2) then 1 + poll_for_response tl else poll_for_response tl *)
+                      | Some _ -> 1 + poll_for_response tl
                       | None -> poll_for_response tl
                     end
                   | VBool b ->
@@ -836,7 +838,7 @@ let schedule_record (state : state) (program : program)
   in
   Printf.printf "chosen_idx %d, len(state.records) %d\n" chosen_idx (List.length state.records);
   begin
-  if List.length state.records == 2 then
+  if List.length state.records >= 2 then
       List.iter (fun r -> Printf.printf "node %d, pc %s\n" r.node (to_string (CFG.label program.cfg r.pc))) state.records
   end;
   pick chosen_idx [] state.records
