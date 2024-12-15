@@ -18,6 +18,8 @@ Node {
     string state = "FOLLOWER";
 
     func Init(me, peers) -> none {
+        //BASE_NODE_INIT();
+
         self = me;
         currentTerm = 0;
         votedFor = -1;
@@ -123,6 +125,7 @@ Node {
 ClientInterface{
     
     func init(dest, replicas) -> none {
+        rpc_call(dest, BASE_NODE_INIT());
         rpc_call(dest, Init(dest, replicas));
     }
 

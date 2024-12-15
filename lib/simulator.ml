@@ -384,6 +384,7 @@ let rec eval (env : record_env) (expr : expr) : value =
     end
   | EString s -> VString s
   | ELessThan (e1, e2) ->
+    Printf.printf "jenndebug e1 %s, e2 %s\n" (to_string_expr e1) (to_string_expr e2);
     begin match eval env e1, eval env e2 with
       | VInt i1, VInt i2 -> VBool (i1 < i2)
       | _ -> failwith "ELessThan eval fail"
@@ -425,6 +426,10 @@ let rec eval (env : record_env) (expr : expr) : value =
   | EPlus (e1, e2) ->
     begin match eval env e1, eval env e2 with
       | VInt i1, VInt i2 -> VInt (i1 + i2)
+      | _, VBool _ -> failwith "EPlus eval fail _, VBool";
+      | VBool _, _ -> 
+        Printf.printf "e1 %s, e2 %s\n" (to_string_expr e1) (to_string_expr e2); 
+        failwith "EPlus eval fail VBool _";
       | _ -> failwith "EPlus eval fail"
     end
   | EMinus (e1, e2) ->
@@ -586,9 +591,16 @@ let store (lhs : lhs) (vl : value) (env : record_env) : unit =
   match eval_lhs env lhs with
   | LVVar var -> 
     if Env.mem env.local_env var then
-      Env.replace env.local_env var vl
+      begin
+        Env.iter (fun k v -> Printf.printf "jenndebug local_env %s, %s\n" k (to_string_value v)) env.local_env;
+        Printf.printf "jenndebug local_env store var %s\n" var;
+        Env.replace env.local_env var vl
+      end
     else
-      Env.replace env.node_env var vl
+      begin
+        Printf.printf "jenndebug node_env store var %s\n" var;
+        Env.replace env.node_env var vl
+      end
   | LVAccess (key, table) ->
     Hashtbl.replace table key vl
   | LVAccessList (idx, ref_l) ->
@@ -644,9 +656,10 @@ let exec (state : state) (program : program) (record : record)  =
   in
   let rec loop () =
     match CFG.label program.cfg record.pc with
-    | Instr (instr, next) -> 
+    | Instr (instruction, next) -> 
+      Printf.printf "jenndebug node %d\n" record.node;
       record.pc <- next;
-      begin match instr with
+      begin match instruction with
         | Async (lhs, node, func, actuals) -> 
           begin match eval env node with
             | VNode node_id ->
@@ -656,6 +669,43 @@ let exec (state : state) (program : program) (record : record)  =
               let new_env = Env.create 91 in
               List.iter2 (fun (formal, _) actual ->
                   Env.add new_env formal (eval env actual)) formals actuals;
+              begin
+                if func <> "BASE_NODE_INIT" then
+                  begin
+                    Printf.printf("func %s\n") func;
+                    let rec traverse (label : 'a label) : (string * expr) list =
+                      match label with
+                      | Instr (i, n) ->
+                        begin match i with
+                          | Assign (lhs, expr) -> 
+                            (* Printf.printf "JENNDEBUGDERP lhs %s, expr %s\n" (to_string_lhs lhs) (to_string_expr expr); *)
+                            begin match lhs with
+                              | LVar var -> (var, expr) :: traverse (CFG.label program.cfg n)
+                              | _ -> traverse (CFG.label program.cfg n)
+                            end
+                          | _ -> traverse (CFG.label program.cfg n)
+                        end
+                      | Pause n -> traverse (CFG.label program.cfg n)
+                      | Await (_, _, n) -> traverse (CFG.label program.cfg n)
+                      | Return _ -> []
+                      | Cond (_, _, e) -> traverse (CFG.label program.cfg e) (* TODO jenndebug this is incorrect, then clause missing *)
+                      | ForLoopIn (_, _, b, n) -> (traverse (CFG.label program.cfg b)) @ (traverse (CFG.label program.cfg n))
+                      | Print (_, n) -> traverse (CFG.label program.cfg n)
+                    in 
+                    let local_vars = traverse (CFG.label program.cfg entry) in
+                    List.iter (fun (var, _) -> 
+                        if (Env.mem state.nodes.(node_id) var) || (Env.mem new_env var) then
+                          Printf.printf "var %s already in global or local env\n" var
+                        else
+                          begin
+                            Printf.printf "Add var %s to local env\n" var;
+                            Env.add new_env var (VBool false)
+                          end
+                      ) local_vars
+                  end
+                else
+                  Printf.printf "BASE_NODE_INIT\n"
+              end;
               let new_record =
                 { node = node_id
                 ; pc = entry

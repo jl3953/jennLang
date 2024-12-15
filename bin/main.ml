@@ -46,9 +46,9 @@ let mod_op (i : int) (m : int): int =
     i mod m
 
 (* let jenns_birthday_counter = ref 214
-let increment_birthday () : int = 
-  jenns_birthday_counter := !jenns_birthday_counter + 1;
-  !jenns_birthday_counter *)
+   let increment_birthday () : int = 
+   jenns_birthday_counter := !jenns_birthday_counter + 1;
+   !jenns_birthday_counter *)
 
 let global_state = 
   { nodes = Array.init (num_servers + num_clients + num_sys_threads) (fun _ -> Env.create 91) 
@@ -318,70 +318,10 @@ let parse_file (filename : string) : prog =
   close_in ic;
   ast
 
-let init_topology (topology : string) (global_state : state) (prog : program) : unit =
-  match topology with
-  | "LINEAR" -> 
-    for i = 0 to num_servers - 1 do
-      schedule_client global_state prog "init" [
-        VNode i (* dest *)
-      ; VString "Mid" (* name *)
-      ; VNode (mod_op (i-1) num_servers) (* pred *)
-      ; VNode (mod_op (i-2) num_servers) (* pred_pred *)
-      ; VNode (mod_op (i+1) num_servers) (* succ *)
-      ; VNode (mod_op (i+2) num_servers) (* succ_succ *)
-      ; VNode head_idx
-      ; VNode tail_idx
-      ; VNode i
-      ; VMap (data ())] 0;
-      sync_exec global_state prog false false false [] false;
-      (* Hashtbl.iter (fun _ _ -> print_endline "+1") data; *)
-      print_endline "init mid";
-    done;
-    schedule_client global_state prog "init" [
-      VNode head_idx (* dest *)
-    ; VString "Head" (* name *)
-    ; VNode (mod_op (head_idx-1) num_servers) (* pred *)
-    ; VNode (mod_op (head_idx-2) num_servers) (* pred_pred *)
-    ; VNode (mod_op (head_idx+1) num_servers) (* succ *)
-    ; VNode (mod_op (head_idx+2)num_servers) (* succ_succ *)
-    ; VNode head_idx (* head *)
-    ; VNode tail_idx (* tail *)
-    ; VNode head_idx
-    ; VMap (data ())] 0;
-    print_endline "init head";
-    (* Hashtbl.iter (fun _ _ -> print_endline "+1") data; *)
-    sync_exec global_state prog false false false [] false;
-    schedule_client global_state prog "init" [
-      VNode tail_idx (* dest *)
-    ; VString "Tail" (* name *)
-    ; VNode (mod_op (tail_idx-1) num_servers) (* pred *)
-    ; VNode (mod_op (tail_idx-2) num_servers) (* pred_pred *)
-    ; VNode (mod_op (tail_idx+1) num_servers) (* succ *)
-    ; VNode (mod_op (tail_idx+2) num_servers) (* succ_succ *)
-    ; VNode head_idx
-    ; VNode tail_idx
-    ; VNode tail_idx
-    ; VMap (data ())] 0;
-    print_endline "init tail";
-    (* Hashtbl.iter (fun _ _ -> print_endline "+1") data; *)
-    sync_exec global_state prog false false false [] false;
-  | "STAR" -> 
-    for i = 0 to num_servers - 1 do
-      schedule_client global_state prog "init" [
-        VNode i (* dest *)
-      (* ; VNode 0 primary *)
-      (* ; VList (ref (List.init fan_out (fun i -> VNode (i + 1)))) backups *)
-      ; VList (ref (List.init fan_out (fun i -> VNode (i))))
-      ] 0;
-      sync_exec global_state prog false false false [] false
-    done
-  | "RING" -> raise (Failure "Not implemented RING topology")
-  | "FULL" -> raise (Failure "Not implemented FULL topology")
-  | _ -> raise (Failure "Invalid topology")
 
 let print_single_node (node : (value Env.t)) = 
   Env.iter (fun key value -> 
-    Printf.printf "%s: %s\n" key (to_string_value value)) node
+      Printf.printf "%s: %s\n" key (to_string_value value)) node
 
 let print_global_nodes (nodes : (value Env.t) array) = 
   Array.iter (fun node ->
@@ -389,6 +329,71 @@ let print_global_nodes (nodes : (value Env.t) array) =
       print_single_node node;
       print_endline "";
     ) nodes
+
+let init_topology (topology : string) (global_state : state) (prog : program) : unit =
+  begin
+    match topology with
+    | "LINEAR" -> 
+      for i = 0 to num_servers - 1 do
+        schedule_client global_state prog "init" [
+          VNode i (* dest *)
+        ; VString "Mid" (* name *)
+        ; VNode (mod_op (i-1) num_servers) (* pred *)
+        ; VNode (mod_op (i-2) num_servers) (* pred_pred *)
+        ; VNode (mod_op (i+1) num_servers) (* succ *)
+        ; VNode (mod_op (i+2) num_servers) (* succ_succ *)
+        ; VNode head_idx
+        ; VNode tail_idx
+        ; VNode i
+        ; VMap (data ())] 0;
+        sync_exec global_state prog false false false [] false;
+        (* Hashtbl.iter (fun _ _ -> print_endline "+1") data; *)
+        print_endline "init mid";
+      done;
+      schedule_client global_state prog "init" [
+        VNode head_idx (* dest *)
+      ; VString "Head" (* name *)
+      ; VNode (mod_op (head_idx-1) num_servers) (* pred *)
+      ; VNode (mod_op (head_idx-2) num_servers) (* pred_pred *)
+      ; VNode (mod_op (head_idx+1) num_servers) (* succ *)
+      ; VNode (mod_op (head_idx+2)num_servers) (* succ_succ *)
+      ; VNode head_idx (* head *)
+      ; VNode tail_idx (* tail *)
+      ; VNode head_idx
+      ; VMap (data ())] 0;
+      print_endline "init head";
+      (* Hashtbl.iter (fun _ _ -> print_endline "+1") data; *)
+      sync_exec global_state prog false false false [] false;
+      schedule_client global_state prog "init" [
+        VNode tail_idx (* dest *)
+      ; VString "Tail" (* name *)
+      ; VNode (mod_op (tail_idx-1) num_servers) (* pred *)
+      ; VNode (mod_op (tail_idx-2) num_servers) (* pred_pred *)
+      ; VNode (mod_op (tail_idx+1) num_servers) (* succ *)
+      ; VNode (mod_op (tail_idx+2) num_servers) (* succ_succ *)
+      ; VNode head_idx
+      ; VNode tail_idx
+      ; VNode tail_idx
+      ; VMap (data ())] 0;
+      print_endline "init tail";
+      (* Hashtbl.iter (fun _ _ -> print_endline "+1") data; *)
+      sync_exec global_state prog false false false [] false;
+    | "STAR" -> 
+      for i = 0 to num_servers - 1 do
+        schedule_client global_state prog "init" [
+          VNode i (* dest *)
+        (* ; VNode 0 primary *)
+        (* ; VList (ref (List.init fan_out (fun i -> VNode (i + 1)))) backups *)
+        ; VList (ref (List.init fan_out (fun i -> VNode (i))))
+        ] 0;
+        sync_exec global_state prog false false false [] false
+      done
+    | "RING" -> raise (Failure "Not implemented RING topology")
+    | "FULL" -> raise (Failure "Not implemented FULL topology")
+    | _ -> raise (Failure "Invalid topology")
+  end;
+  print_global_nodes global_state.nodes
+
 
 let interp (spec : string) (intermediate_output : string) (scheduler_config_json : string) : unit =
 
@@ -411,8 +416,8 @@ let interp (spec : string) (intermediate_output : string) (scheduler_config_json
   schedule_client global_state prog "beginElection" [VNode 1] 0;
 
   (*schedule_client global_state prog "write" [VNode 0; VString "birthday"; VInt (increment_birthday())] 0;
-  sync_exec global_state prog false false false [] false;
-  print_endline "wrote 215";*)
+    sync_exec global_state prog false false false [] false;
+    print_endline "wrote 215";*)
 
   (* for node = 0 to chain_len do
      schedule_client global_state prog "startFailover" [VNode node] 0;
@@ -436,15 +441,15 @@ let interp (spec : string) (intermediate_output : string) (scheduler_config_json
   (* sync_exec global_state prog false false false true; *)
 
   (*let new_chain = [0; 1; 2; 3; 4; 5; 6] in
-  let new_chain_len = List.length new_chain in
-  let write_call = 1 in 
-  let add_node_call = 1 in
-  (* let added_node = ref false in *)
-  let added_node = ref true in 
-  (* let deleted_node = ref false in *)
-  let delete_node_call = 1 in
-  let limit = 500 in
-  for i = 0 to limit do
+    let new_chain_len = List.length new_chain in
+    let write_call = 1 in 
+    let add_node_call = 1 in
+    (* let added_node = ref false in *)
+    let added_node = ref true in 
+    (* let deleted_node = ref false in *)
+    let delete_node_call = 1 in
+    let limit = 500 in
+    for i = 0 to limit do
     if (List.length global_state.free_clients > 0) then 
       begin
         let choose_client_threshold = new_chain_len + write_call + add_node_call + delete_node_call in
@@ -516,10 +521,10 @@ let interp (spec : string) (intermediate_output : string) (scheduler_config_json
           schedule_record global_state prog 
             randomly_drop_msgs cut_tail_from_mid sever_all_to_tail_but_mid partition_away_nodes randomly_delay_msgs
       end
-  done;*)
+    done;*)
 
   (* sync_exec global_state prog 
-    randomly_drop_msgs cut_tail_from_mid sever_all_to_tail_but_mid partition_away_nodes randomly_delay_msgs; *)
+     randomly_drop_msgs cut_tail_from_mid sever_all_to_tail_but_mid partition_away_nodes randomly_delay_msgs; *)
 
   bootlegged_sync_exec global_state prog 
     randomly_drop_msgs cut_tail_from_mid sever_all_to_tail_but_mid partition_away_nodes randomly_delay_msgs;
