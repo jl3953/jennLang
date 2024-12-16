@@ -32,7 +32,7 @@ type expr =
   | EAnd of expr * expr
   | EOr of expr * expr
   | EEqualsEquals of expr * expr
-  | EMap of (string * expr) list
+  | EMap of (expr * expr) list
   | EList of expr list
   | EListPrepend of expr * expr
   | EListAppend of expr * expr
@@ -120,7 +120,7 @@ let rec to_string_expr (e: expr) : string =
   | EAnd (e1, e2) -> "EAnd(" ^ (to_string_expr e1) ^ ", " ^ (to_string_expr e2) ^ ")"
   | EOr (e1, e2) -> "EOr(" ^ (to_string_expr e1) ^ ", " ^ (to_string_expr e2) ^ ")"
   | EEqualsEquals (e1, e2) -> "EEqualsEquals(" ^ (to_string_expr e1) ^ ", " ^ (to_string_expr e2) ^ ")"
-  | EMap kvpairs -> "EMap(" ^ (String.concat ", " (List.map (fun (k, v) -> k ^ ": " ^ (to_string_expr v)) kvpairs)) ^ ")"
+  | EMap kvpairs -> "EMap(" ^ (String.concat ", " (List.map (fun (k, v) -> (to_string_expr k) ^ ": " ^ (to_string_expr v)) kvpairs)) ^ ")"
   | EList exprs -> "EList(" ^ (String.concat ", " (List.map to_string_expr exprs)) ^ ")"
   | EListPrepend (e1, e2) -> "EListPrepend(" ^ (to_string_expr e1) ^ ", " ^ (to_string_expr e2) ^ ")"
   | EListAppend (e1, e2) -> "EListAppend(" ^ (to_string_expr e1) ^ ", " ^ (to_string_expr e2) ^ ")"
@@ -278,25 +278,10 @@ let rec eval (env : record_env) (expr : expr) : value =
           | _ ->
             begin match eval env k with 
               | VInt i -> 
-                begin
-                  Printf.printf "jenndebug idx %d, list.Length %d\n" i (List.length !l);
-                  Printf.printf "jenndebug list %s\n" (String.concat ", " (List.map (fun x -> 
-                      match x with 
-                      | VInt i -> string_of_int i 
-                      | VString s -> s
-                      | VBool b -> string_of_bool b
-                      | VList _ -> "list"
-                      | VFuture _ -> "Vfuture"
-                      | VNode _ -> "VNode"
-                      | VMap _ -> "VMap"
-                      | VOption _ -> "VOption") !l));
-                  if i < 0 || i >= List.length !l then 
-                    begin
-                      failwith "idx out of range of VList"
-                    end
-                  else
-                    List.nth !l i
-                end
+                if i < 0 || i >= List.length !l then 
+                  failwith "idx out of range of VList"
+                else
+                  List.nth !l i
               | _ -> failwith "Cannot index into a list with non-integer"
             end
         end
@@ -355,16 +340,16 @@ let rec eval (env : record_env) (expr : expr) : value =
       | VString _, _ -> failwith "EEqualsEquals eval fail VString"
       | VNode _, _ -> failwith "EEqualsEquals eval fail VNode"
     end
-  | EMap kvpairs -> 
-    let rec makemap (kvpairs : (string * expr) list) : (value, value) Hashtbl.t =
+  | EMap kvp -> 
+    let rec makemap (kvpairs : (expr * expr) list) : (value, value) Hashtbl.t =
       begin match kvpairs with
         | [] -> Hashtbl.create 91
         | (k, v) :: rest ->
           let tbl = makemap rest in
-          Hashtbl.add (makemap rest) (VString k) (eval env v); 
+          Hashtbl.add tbl (eval env k) (eval env v); 
           tbl
       end in 
-    VMap (makemap kvpairs)
+    VMap (makemap kvp)
   | EList exprs ->
     let rec makelist (exprs : expr list) : value list ref =
       begin match exprs with
@@ -384,7 +369,6 @@ let rec eval (env : record_env) (expr : expr) : value =
     end
   | EString s -> VString s
   | ELessThan (e1, e2) ->
-    Printf.printf "jenndebug e1 %s, e2 %s\n" (to_string_expr e1) (to_string_expr e2);
     begin match eval env e1, eval env e2 with
       | VInt i1, VInt i2 -> VBool (i1 < i2)
       | _ -> failwith "ELessThan eval fail"
@@ -395,7 +379,8 @@ let rec eval (env : record_env) (expr : expr) : value =
       | _ -> failwith "ELessThanEquals eval fail"
     end
   | EGreaterThan (e1, e2) ->
-    begin match eval env e1, eval env e2 with
+    begin
+      match eval env e1, eval env e2 with
       | VInt i1, VInt i2 -> VBool (i1 > i2)
       | _ -> failwith "EGreaterThan eval fail"
     end
@@ -591,16 +576,9 @@ let store (lhs : lhs) (vl : value) (env : record_env) : unit =
   match eval_lhs env lhs with
   | LVVar var -> 
     if Env.mem env.local_env var then
-      begin
-        Env.iter (fun k v -> Printf.printf "jenndebug local_env %s, %s\n" k (to_string_value v)) env.local_env;
-        Printf.printf "jenndebug local_env store var %s\n" var;
-        Env.replace env.local_env var vl
-      end
+      Env.replace env.local_env var vl
     else
-      begin
-        Printf.printf "jenndebug node_env store var %s\n" var;
-        Env.replace env.node_env var vl
-      end
+      Env.replace env.node_env var vl
   | LVAccess (key, table) ->
     Hashtbl.replace table key vl
   | LVAccessList (idx, ref_l) ->
@@ -657,13 +635,11 @@ let exec (state : state) (program : program) (record : record)  =
   let rec loop () =
     match CFG.label program.cfg record.pc with
     | Instr (instruction, next) -> 
-      Printf.printf "jenndebug node %d\n" record.node;
       record.pc <- next;
       begin match instruction with
         | Async (lhs, node, func, actuals) -> 
           begin match eval env node with
             | VNode node_id ->
-              Printf.printf "executing async to from node %d to node %d %s \n" record.node node_id func;
               let new_future = ref None in
               let { entry; formals; _ } = function_info func program in
               let new_env = Env.create 91 in
@@ -671,40 +647,31 @@ let exec (state : state) (program : program) (record : record)  =
                   Env.add new_env formal (eval env actual)) formals actuals;
               begin
                 if func <> "BASE_NODE_INIT" then
-                  begin
-                    Printf.printf("func %s\n") func;
-                    let rec traverse (label : 'a label) : (string * expr) list =
-                      match label with
-                      | Instr (i, n) ->
-                        begin match i with
-                          | Assign (lhs, expr) -> 
-                            (* Printf.printf "JENNDEBUGDERP lhs %s, expr %s\n" (to_string_lhs lhs) (to_string_expr expr); *)
-                            begin match lhs with
-                              | LVar var -> (var, expr) :: traverse (CFG.label program.cfg n)
-                              | _ -> traverse (CFG.label program.cfg n)
-                            end
-                          | _ -> traverse (CFG.label program.cfg n)
-                        end
-                      | Pause n -> traverse (CFG.label program.cfg n)
-                      | Await (_, _, n) -> traverse (CFG.label program.cfg n)
-                      | Return _ -> []
-                      | Cond (_, _, e) -> traverse (CFG.label program.cfg e) (* TODO jenndebug this is incorrect, then clause missing *)
-                      | ForLoopIn (_, _, b, n) -> (traverse (CFG.label program.cfg b)) @ (traverse (CFG.label program.cfg n))
-                      | Print (_, n) -> traverse (CFG.label program.cfg n)
-                    in 
-                    let local_vars = traverse (CFG.label program.cfg entry) in
-                    List.iter (fun (var, _) -> 
-                        if (Env.mem state.nodes.(node_id) var) || (Env.mem new_env var) then
-                          Printf.printf "var %s already in global or local env\n" var
-                        else
-                          begin
-                            Printf.printf "Add var %s to local env\n" var;
-                            Env.add new_env var (VBool false)
+                  let rec traverse (label : 'a label) : (string * expr) list =
+                    match label with
+                    | Instr (i, n) ->
+                      begin match i with
+                        | Assign (lhs, expr) -> 
+                          (* Printf.printf "JENNDEBUGDERP lhs %s, expr %s\n" (to_string_lhs lhs) (to_string_expr expr); *)
+                          begin match lhs with
+                            | LVar var -> (var, expr) :: traverse (CFG.label program.cfg n)
+                            | _ -> traverse (CFG.label program.cfg n)
                           end
-                      ) local_vars
-                  end
-                else
-                  Printf.printf "BASE_NODE_INIT\n"
+                        | _ -> traverse (CFG.label program.cfg n)
+                      end
+                    | Pause n -> traverse (CFG.label program.cfg n)
+                    | Await (_, _, n) -> traverse (CFG.label program.cfg n)
+                    | Return _ -> []
+                    | Cond (_, _, e) -> traverse (CFG.label program.cfg e) (* TODO jenndebug this is incorrect, then clause missing *)
+                    | ForLoopIn (_, _, b, n) -> (traverse (CFG.label program.cfg b)) @ (traverse (CFG.label program.cfg n))
+                    | Print (_, n) -> traverse (CFG.label program.cfg n)
+                  in 
+                  let local_vars = traverse (CFG.label program.cfg entry) in
+                  List.iter (fun (var, _) -> 
+                      if not((Env.mem state.nodes.(node_id) var) 
+                             || (Env.mem new_env var)) then
+                        Env.add new_env var (VBool false)
+                    ) local_vars
               end;
               let new_record =
                 { node = node_id
@@ -893,9 +860,17 @@ let schedule_record (state : state) (program : program)
           | Instr (i,_) ->
             begin match i with 
               | Async (_, node, _, _) -> 
-                let node_id = match eval env node with 
+                let node_id = begin 
+                  match eval env node with 
                   | VNode n_id -> n_id
-                  | _ -> failwith "Type error!" in
+                  | VInt _ -> failwith "Type error VInt!"
+                  | VBool _ -> failwith "Type error VBool!"
+                  | VString _ -> failwith "Type error VString!"
+                  | VMap _ -> failwith "Type error VMap!"
+                  | VList _ -> failwith "Type error VList!"
+                  | VOption _ -> failwith "Type error VOption!"
+                  | VFuture _ -> failwith "Type error VFuture!"
+                end in
                 let src_node = r.node in
                 let dest_node = node_id in
                 let should_execute = ref true in
@@ -963,13 +938,7 @@ let schedule_record (state : state) (program : program)
   (* | Pause _ *)
   (* | Await (_, _, _) -> if (List.length state.records) == 1 then idx else 1 *)
   (* | _ -> idx *)
-  in
-  Printf.printf "chosen_idx %d, len(state.records) %d\n" chosen_idx (List.length state.records);
-  begin
-    if List.length state.records >= 2 then
-      List.iter (fun r -> Printf.printf "node %d, pc %s\n" r.node (to_string (CFG.label program.cfg r.pc))) state.records
-  end;
-  pick chosen_idx [] state.records
+  in pick chosen_idx [] state.records
 
 (* Choose a client without a pending operation, create a new activation record
    to execute it, and append the invocation to the history *)

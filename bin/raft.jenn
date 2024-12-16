@@ -18,7 +18,6 @@ Node {
     string state = "FOLLOWER";
 
     func Init(me, peers) -> none {
-        //BASE_NODE_INIT();
 
         self = me;
         currentTerm = 0;
@@ -41,7 +40,7 @@ Node {
         }
     }
 
-    func BeginElection(replies, peer, quorum, copyCurrentTerm) -> none {
+    func BeginElection() -> none {
         currentTerm = currentTerm + 1;
         state = "CANDIDATE";
         votedFor = self;
@@ -57,8 +56,10 @@ Node {
         copyCurrentTerm = currentTerm;
         quorum = 1 - 1 + len(replicas) / 2; // vote for self counts
 
+        // hoisting some variables
         resps_recvd = 0;
         votes = 1;
+        any = {};
         for (placeholder = 0; resps_recvd < len(replies); placeholder = placeholder + 1) {
 
             await has_next_resp(replies) || (state != "CANDIDATE") || (currentTerm != copyCurrentTerm);
@@ -88,10 +89,7 @@ Node {
 
     func RequestVote(term, candidateId, lastLogIndx, lastLogTerm) -> Map {
         if (term < currentTerm) {
-            resp = {};
-            resp["term"] = currentTerm;
-            resp["voteGranted"] = false;
-            return resp;
+            return {"term": currentTerm, "voteGranted": false};
         } else if (votedFor == -1 || votedFor == candidateId) {
             state = "FOLLOWER";
             votedFor = candidateId;
@@ -100,23 +98,18 @@ Node {
                 currentTerm = term;
                 state = "FOLLOWER";
             }
-            resp = {};
-            resp["term"] = term;
-            resp["voteGranted"] = true;
-            return resp;
+            return {"term": term, "voteGranted": true};
         } else {
             if (term > currentTerm) {
                 currentTerm = term;
                 state = "FOLLOWER";
             }
-            resp = {};
-            resp["term"] = -1;
-            resp["voteGranted"] = false;
-            return resp;
+
+            return {"term": -1, "voteGranted": false};
         }
     }
 
-    func Heartbeat() -> none {
+    func AppendEntries() -> none {
         temp = 1;
     }
 
@@ -130,7 +123,7 @@ ClientInterface{
     }
 
     func beginElection(dest) -> none {
-        rpc_call(dest, BeginElection({}, 0, 0, 0));
+        rpc_call(dest, BeginElection());
     }
 
 }

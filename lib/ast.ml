@@ -46,7 +46,7 @@ and rhs =
   | NextResp of rhs
 
 and collection = 
-  | MapLit of (string * rhs) list
+  | MapLit of (rhs * rhs) list
   | ListLit of rhs list
   | ListPrepend of rhs * rhs
   | ListAppend of rhs * rhs

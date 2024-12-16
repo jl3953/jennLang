@@ -149,9 +149,9 @@ options:
     { Option(id) :: opts }
 
 kv_pairs:
-  | key = ID COLON value = right_side
+  | key = right_side COLON value = right_side
     { (key, value) :: []}
-  | key = ID COLON value = right_side COMMA kvs = kv_pairs
+  | key = right_side COLON value = right_side COMMA kvs = kv_pairs
     { (key, value)::kvs }
 
 

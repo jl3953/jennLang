@@ -91,7 +91,7 @@ let rec convert_rhs (rhs : rhs) : Simulator.expr =
     end 
   | CollectionRHS collection_lit ->
     begin match collection_lit with
-      | MapLit kvpairs -> EMap (List.map (fun (k, v) -> (k, convert_rhs v)) kvpairs);
+      | MapLit kvpairs -> EMap (List.map (fun (k, v) -> (convert_rhs k, convert_rhs v)) kvpairs)
       | ListLit items -> EList (List.map (fun (v) -> convert_rhs v) items)
       | ListPrepend (rhs, ls) -> EListPrepend(convert_rhs rhs, convert_rhs ls)
       | ListAppend (ls, rhs) -> EListAppend(convert_rhs ls, convert_rhs rhs)
@@ -391,8 +391,7 @@ let init_topology (topology : string) (global_state : state) (prog : program) : 
     | "RING" -> raise (Failure "Not implemented RING topology")
     | "FULL" -> raise (Failure "Not implemented FULL topology")
     | _ -> raise (Failure "Invalid topology")
-  end;
-  print_global_nodes global_state.nodes
+  end
 
 
 let interp (spec : string) (intermediate_output : string) (scheduler_config_json : string) : unit =
