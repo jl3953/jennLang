@@ -4,8 +4,7 @@ Node {
     int self = 0;
     int currentTerm = 0;
     int votedFor = 0;
-    List log_command = [];
-    List log_term = [];
+    List log = [];
     List replicas = [];
 
     // volatile state on servers
@@ -22,8 +21,7 @@ Node {
         self = me;
         currentTerm = 0;
         votedFor = -1;
-        log_command = ["idx0"];
-        log_term = [-1];
+        log = [{"term": 0, "cmd": "WRITE_IDX0"}];
 
         commitIndex = 0;
         lastApplied = 0;
@@ -35,6 +33,7 @@ Node {
         state = "FOLLOWER";
 
         for (i = 0; i < len(peers); i = i+1) {
+            nextIndex = append(nextIndex, 0);
             matchIndex = append(matchIndex, 0);
             replicas = append(replicas, peers[i]);
         }
@@ -46,6 +45,7 @@ Node {
         votedFor = self;
 
         replies = {};
+        peer = 0;
         for (i = 0; i < len(replicas); i = i+1) {
             peer = replicas[i];
             if (peer != self) {
@@ -60,6 +60,7 @@ Node {
         resps_recvd = 0;
         votes = 1;
         any = {};
+        ni = 0;
         for (placeholder = 0; resps_recvd < len(replies); placeholder = placeholder + 1) {
 
             await has_next_resp(replies) || (state != "CANDIDATE") || (currentTerm != copyCurrentTerm);
@@ -78,13 +79,39 @@ Node {
                 votes = votes + 1;
                 if (votes >= quorum) {
                     state = "LEADER";
+
+                    l = len(log);
+                    for (ni = 0; ni < len(replicas); ni = ni + 1) {
+                        nextIndex[ni] = l; // initialized to leader last log idx + 1
+                        matchIndex[ni] = 0;
+                    }
                     return 0;
                 } 
             }
         }
 
         // election failed, restart the election
-        BeginElection({}, 0, 0, 0);
+        BeginElection();
+    }
+
+    func BroadcastHeartbeats() -> None {
+        prevLogIndex = len(log) - 1;
+        prevLogTerm = log[prevLogIndex]["term"];
+
+        log = append(log, {"term": currentTerm, "cmd": "WON_ELECTION"});
+        entries = log[prevLogIndex + 1:len(log)];
+        print(entries);
+
+        resps = {};
+        for (p = 0; p < len(replicas); p = p + 1) {
+            peer = replicas[p];
+            if (peer != self) {
+                resps[peer] = rpc_async_call(peer, 
+                    AppendEntries(currentTerm, self, prevLogIndex, prevLogTerm, entries, commitIndex));
+            }
+        }
+
+        // TODO jenndebug finish the rest of this
     }
 
     func RequestVote(term, candidateId, lastLogIndx, lastLogTerm) -> Map {
@@ -94,23 +121,35 @@ Node {
             state = "FOLLOWER";
             votedFor = candidateId;
             currentTerm = term;
-            if (term > currentTerm) {
-                currentTerm = term;
-                state = "FOLLOWER";
-            }
             return {"term": term, "voteGranted": true};
         } else {
             if (term > currentTerm) {
                 currentTerm = term;
                 state = "FOLLOWER";
             }
-
             return {"term": -1, "voteGranted": false};
         }
     }
 
-    func AppendEntries() -> none {
-        temp = 1;
+    func AppendEntries(term, leaderId, prevLogIndex, prevLogTerm, entries, leaderCommit) -> Map {
+        //return {"term": currentTerm, "success": true}
+        
+        if (term < currentTerm) {
+            return {"term": currentTerm, "success": false};
+        } else if (len(log) <= prevLogIndex) {
+            return {"term": -1, "success": false};
+        } else if (log[prevLogIndex]["term"] != prevLogTerm) {
+            log = log[0:prevLogIndex];
+            return {"term": -1, "success": false};
+        }
+
+        for (i = 0; i < len(entries); i = i + 1) {
+            log = append(log, entries[i]);
+        }
+
+        // TODO jenndebug need a placeholder here
+        return {"term": currentTerm, "success": true};
+
     }
 
 }
@@ -124,6 +163,10 @@ ClientInterface{
 
     func beginElection(dest) -> none {
         rpc_call(dest, BeginElection());
+    }
+
+    func broadcastHeartbeats(dest) -> none {
+        rpc_call(dest, BroadcastHeartbeats());
     }
 
 }

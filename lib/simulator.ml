@@ -1,5 +1,4 @@
 module DA = BatDynArray
-
 (* A couple of features of the language in ast.ml make it difficult to
    implement directly:
    - RPCs and function calls in RHSs are complicated (e.g., consider an RPC as
@@ -36,6 +35,7 @@ type expr =
   | EList of expr list
   | EListPrepend of expr * expr
   | EListAppend of expr * expr
+  | EListSubsequence of expr * expr * expr
   | EString of string
   | ELessThan of expr * expr
   | ELessThanEquals of expr * expr
@@ -124,6 +124,7 @@ let rec to_string_expr (e: expr) : string =
   | EList exprs -> "EList(" ^ (String.concat ", " (List.map to_string_expr exprs)) ^ ")"
   | EListPrepend (e1, e2) -> "EListPrepend(" ^ (to_string_expr e1) ^ ", " ^ (to_string_expr e2) ^ ")"
   | EListAppend (e1, e2) -> "EListAppend(" ^ (to_string_expr e1) ^ ", " ^ (to_string_expr e2) ^ ")"
+  | EListSubsequence(ls, start_idx, end_idx) -> "EListSubsequence(" ^ (to_string_expr ls) ^ ", " ^ (to_string_expr start_idx) ^ ", " ^ (to_string_expr end_idx) ^ ")"
   | EString s -> "\"" ^ s ^ "\""
   | ELessThan (e1, e2) -> "ELessThan(" ^ (to_string_expr e1) ^ ", " ^ (to_string_expr e2) ^ ")"
   | ELessThanEquals (e1, e2) -> "ELessThanEquals(" ^ (to_string_expr e1) ^ ", " ^ (to_string_expr e2) ^ ")"
@@ -367,6 +368,28 @@ let rec eval (env : record_env) (expr : expr) : value =
       | VList l, v -> VList (ref(!l @ [v]))
       | _ -> failwith "EListAppend eval fail"
     end
+  | EListSubsequence(ls, start_idx, end_idx) ->
+    begin match eval env ls, eval env start_idx, eval env end_idx with
+      | VList l, VInt start_idx, VInt end_idx -> 
+        begin match !l with
+          | [] -> failwith "EListSubsequence eval fail on empty list"
+          | _ -> 
+            if start_idx < 0 || end_idx < 0 || start_idx >= List.length !l || end_idx > List.length !l then 
+              failwith "EListSubsequence eval fail on out of bounds"
+            else
+              let rec subseq (lst : value list) (start_idx : int) (end_idx : int) : value list =
+                begin match lst with
+                  | [] -> []
+                  | hd :: tl -> 
+                    if start_idx = 0 then 
+                      if end_idx = 0 then []
+                      else hd :: subseq tl start_idx (end_idx - 1)
+                    else
+                      subseq tl (start_idx - 1) (end_idx - 1)
+                end in VList(ref(subseq !l start_idx end_idx))
+        end
+      | _ -> failwith "EListSubsequence eval fail"
+    end
   | EString s -> VString s
   | ELessThan (e1, e2) ->
     begin match eval env e1, eval env e2 with
@@ -591,18 +614,7 @@ let store (lhs : lhs) (vl : value) (env : record_env) : unit =
         else
           begin
             let lst = !ref_l in
-            ref_l := List.mapi (fun j x -> if j = i then vl else x) lst;
-            print_endline "derpjenn";
-            print_endline (String.concat ", " (List.map (fun x -> 
-                match x with 
-                | VInt i -> string_of_int i 
-                | VString s -> s
-                | VBool b -> string_of_bool b
-                | VList _ -> "list"
-                | VFuture _ -> "Vfuture"
-                | VNode _ -> "VNode"
-                | VMap _ -> "VMap"
-                | VOption _ -> "VOption") !ref_l))
+            ref_l := List.mapi (fun j x -> if j = i then vl else x) lst
           end
       | _ -> failwith "Can't index into a list with non-integer"
     end

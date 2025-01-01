@@ -50,6 +50,7 @@ and collection =
   | ListLit of rhs list
   | ListPrepend of rhs * rhs
   | ListAppend of rhs * rhs
+  | ListSubsequence of rhs * rhs * rhs
 
 and param = Param of rhs 
 

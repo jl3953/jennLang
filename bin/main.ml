@@ -95,6 +95,7 @@ let rec convert_rhs (rhs : rhs) : Simulator.expr =
       | ListLit items -> EList (List.map (fun (v) -> convert_rhs v) items)
       | ListPrepend (rhs, ls) -> EListPrepend(convert_rhs rhs, convert_rhs ls)
       | ListAppend (ls, rhs) -> EListAppend(convert_rhs ls, convert_rhs rhs)
+      | ListSubsequence (ls, start_idx, end_idx) -> EListSubsequence(convert_rhs ls, convert_rhs start_idx, convert_rhs end_idx)
     end
   | RpcCallRHS _ -> failwith "Already implemented RpcCallRHS in top level"
   | Head ls -> EListAccess(convert_rhs ls, 0)
@@ -412,8 +413,8 @@ let interp (spec : string) (intermediate_output : string) (scheduler_config_json
 
   (* schedule_client global_state prog "start" [VNode 0] 0; *)
 
-  schedule_client global_state prog "beginElection" [VNode 1] 0;
-
+  schedule_client global_state prog "beginElection" [VNode 0] 0;
+  schedule_client global_state prog "broadcastHeartbeats" [VNode 0] 0;
   (*schedule_client global_state prog "write" [VNode 0; VString "birthday"; VInt (increment_birthday())] 0;
     sync_exec global_state prog false false false [] false;
     print_endline "wrote 215";*)

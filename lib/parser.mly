@@ -167,7 +167,7 @@ collection:
   | LEFT_CURLY_BRACE kvs = kv_pairs RIGHT_CURLY_BRACE
     { MapLit(kvs) }
   | l = list_lit
-    { l}
+    {l}
 
 collection_access:
   | collection_type = right_side LEFT_SQUARE_BRACKET key = right_side RIGHT_SQUARE_BRACKET
@@ -259,6 +259,8 @@ list_lit:
     { ListAppend(ls, item) }
   | PREPEND LEFT_PAREN item = right_side COMMA ls = right_side RIGHT_PAREN
     { ListPrepend(item, ls) }
+  | ls = right_side LEFT_SQUARE_BRACKET start_idx = right_side COLON end_idx = right_side RIGHT_SQUARE_BRACKET
+    { ListSubsequence(ls, start_idx, end_idx) }
 
 list_ops:
   | HEAD LEFT_PAREN ls = right_side RIGHT_PAREN
