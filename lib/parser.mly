@@ -30,6 +30,7 @@
 %token LEN
 %token MAP
 %token MINUS
+%token MIN
 %token NOT_EQUALS
 %token OPTIONS
 %token OR
@@ -305,6 +306,8 @@ right_side:
     { PollForAnyResp(resps) }
   | NEXT_RESP LEFT_PAREN resps = right_side RIGHT_PAREN
     { NextResp(resps) }
+  | MIN LEFT_PAREN f = right_side COMMA s = right_side RIGHT_PAREN
+    { Min(f, s) }
   (*| rhs = right_side DOT key = ID
     { FieldAccessRHS(rhs, key) }*)
 

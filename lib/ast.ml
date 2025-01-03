@@ -44,6 +44,7 @@ and rhs =
   | PollForResps of rhs * rhs
   | PollForAnyResp of rhs
   | NextResp of rhs
+  | Min of rhs * rhs
 
 and collection = 
   | MapLit of (rhs * rhs) list

@@ -2,23 +2,38 @@ Node {
 
     // persistent state
     int self = 0;
-    int currentTerm = 0;
-    int votedFor = 0;
-    List log = [];
     List replicas = [];
-
-    // volatile state on servers
-    int commitIndex = 0;
-    int lastApplied = 0;
-
-    List nextIndex = [];
-    List matchIndex = [];
-
     string state = "FOLLOWER";
+
+    int currentTerm = 0;    /* latest server has seen (initialized to 0
+                            on first boot, increases monotonically) */
+    int votedFor = 0;       /* candidateId that received vote in current
+                            term (or null if none) */
+    List log = [];          /* log entries; each entry contains command
+                            for state machine, and term when entry
+                            was received by leader (first index is 1) */
+
+    // Volatile state on servers
+    int commitIndex = 0;    /* index of highest log entry known to be
+                            committed (initialized to 0, increases
+                            monotonically) */
+    int lastApplied = 0;    /* index of highest log entry applied to state
+                            machine (initialized to 0, increases
+                            monotonically) */
+
+    // Volatile state on leaders 
+    // (Reinitialized after election)
+    List nextIndex = [];    /* for each server, index of the next log entry
+                            to send to that server (initialized to leader
+                            last log index + 1) */
+    List matchIndex = [];   /* for each server, index of highest log entry
+                            known to be replicated on server
+                            (initialized to 0, increases monotonically) */
 
     func Init(me, peers) -> none {
 
         self = me;
+        state = "FOLLOWER";
         currentTerm = 0;
         votedFor = -1;
         log = [{"term": 0, "cmd": "WRITE_IDX0"}];
@@ -29,8 +44,6 @@ Node {
         nextIndex = [];
         matchIndex = [];
         replicas = [];
-
-        state = "FOLLOWER";
 
         for (i = 0; i < len(peers); i = i+1) {
             nextIndex = append(nextIndex, 0);
@@ -46,10 +59,12 @@ Node {
 
         replies = {};
         peer = 0;
+        lastLogIndx = len(log) - 1;
+        lastLogTerm = log[lastLogIndx]["term"];
         for (i = 0; i < len(replicas); i = i+1) {
             peer = replicas[i];
             if (peer != self) {
-                replies[peer] = rpc_async_call(peer, RequestVote(currentTerm, self, -1, -1));
+                replies[peer] = rpc_async_call(peer, RequestVote(currentTerm, self, lastLogIndx, lastLogTerm));
             }
         }
 
@@ -80,11 +95,12 @@ Node {
                 if (votes >= quorum) {
                     state = "LEADER";
 
-                    l = len(log);
                     for (ni = 0; ni < len(replicas); ni = ni + 1) {
-                        nextIndex[ni] = l; // initialized to leader last log idx + 1
+                        nextIndex[ni] = len(log); // initialized to leader last log idx + 1
                         matchIndex[ni] = 0;
                     }
+
+                    NewEntry("WON_ELECTION");
                     return 0;
                 } 
             }
@@ -94,40 +110,79 @@ Node {
         BeginElection();
     }
 
-    func BroadcastHeartbeats() -> None {
+    func NewEntry(cmd) -> None {
         prevLogIndex = len(log) - 1;
         prevLogTerm = log[prevLogIndex]["term"];
 
-        log = append(log, {"term": currentTerm, "cmd": "WON_ELECTION"});
+        log = append(log, {"term": currentTerm, "cmd": cmd});
         entries = log[prevLogIndex + 1:len(log)];
-        print(entries);
 
-        resps = {};
+        replies = {};
         for (p = 0; p < len(replicas); p = p + 1) {
             peer = replicas[p];
             if (peer != self) {
-                resps[peer] = rpc_async_call(peer, 
+                replies[peer] = rpc_async_call(peer, 
                     AppendEntries(currentTerm, self, prevLogIndex, prevLogTerm, entries, commitIndex));
             }
         }
 
         // TODO jenndebug finish the rest of this
+        resps_recvd = 0;
+        for (placeholder = 0; resps_recvd < len(replies); placeholder = placeholder + 1){
+            await has_next_resp(replies);
+
+            any = next_resp(replies);
+            if (any["term"] > currentTerm) {
+                currentTerm = any["term"];
+                state = "FOLLOWER";
+                return -1;
+            } else if (any["success"] == false) {
+                peer = replicas[any["self"]];
+                nextIndex[peer] = nextIndex[peer] - 1;
+                prevLogIndex = nextIndex[peer] - 1;
+                prevLogTerm = log[prevLogIndex]["term"];
+                entries = log[prevLogIndex + 1:len(log)];
+                replies[peer] = rpc_async_call(peer,
+                    AppendEntries(currentTerm, self, prevLogIndex, prevLogTerm, entries, commitIndex));
+            } else {
+                resps_recvd = resps_recvd + 1;
+
+                peer = replicas[any["self"]];
+                nextIndex[peer] = len(log);
+                matchIndex[peer] = len(log) - 1;
+            }
+        }
+
+        nextIndex[self] = len(log);
+        matchIndex[self] = len(log)-1;
+        commitIndex = len(log) - 1;
+        lastApplied = commitIndex;
+
     }
 
     func RequestVote(term, candidateId, lastLogIndx, lastLogTerm) -> Map {
         if (term < currentTerm) {
-            return {"term": currentTerm, "voteGranted": false};
+            return {"term": currentTerm, "voteGranted": false, "self": self};
         } else if (votedFor == -1 || votedFor == candidateId) {
             state = "FOLLOWER";
             votedFor = candidateId;
             currentTerm = term;
-            return {"term": term, "voteGranted": true};
+
+            thisLastIdx = len(log)-1;
+            thisLastTerm = log[thisLastIdx]["term"];
+            if (lastLogTerm < thisLastTerm) {
+                return {"term": currentTerm, "voteGranted": false, "self": self};
+            } else if ((lastLogTerm == thisLastTerm) && (lastLogIndx < thisLastIdx)) {
+                return {"term": currentTerm, "voteGranted": false, "self": self};
+            } else {
+                return {"term": term, "voteGranted": true, "self": self};
+            }
         } else {
             if (term > currentTerm) {
                 currentTerm = term;
                 state = "FOLLOWER";
             }
-            return {"term": -1, "voteGranted": false};
+            return {"term": -1, "voteGranted": false, "self": self};
         }
     }
 
@@ -135,23 +190,24 @@ Node {
         //return {"term": currentTerm, "success": true}
         
         if (term < currentTerm) {
-            return {"term": currentTerm, "success": false};
+            return {"term": currentTerm, "success": false, "self": self};
         } else if (len(log) <= prevLogIndex) {
-            return {"term": -1, "success": false};
-        } else if (log[prevLogIndex]["term"] != prevLogTerm) {
-            log = log[0:prevLogIndex];
-            return {"term": -1, "success": false};
-        }
-
+            return {"term": currentTerm, "success": false, "self": self};
+        } 
+        log = log[0:prevLogIndex + 1];
         for (i = 0; i < len(entries); i = i + 1) {
             log = append(log, entries[i]);
         }
 
+        if (leaderCommit > commitIndex) {
+            commitIndex = min(leaderCommit, len(log)-1);
+            lastApplied = commitIndex;
+        }
+
         // TODO jenndebug need a placeholder here
-        return {"term": currentTerm, "success": true};
+        return {"term": currentTerm, "success": true, "self": self};
 
     }
-
 }
 
 ClientInterface{
@@ -165,8 +221,7 @@ ClientInterface{
         rpc_call(dest, BeginElection());
     }
 
-    func broadcastHeartbeats(dest) -> none {
-        rpc_call(dest, BroadcastHeartbeats());
+    func newEntry(dest, cmd) -> none {
+        rpc_call(dest, NewEntry(cmd));
     }
-
 }

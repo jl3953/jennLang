@@ -88,6 +88,7 @@ and token = parse
   | "in" { IN }
   | "len" { LEN }
   | "map" { MAP }
+  | "min" { MIN }
   | "Options" { OPTIONS }
   | "prepend" { PREPEND }
   | "print" { PRINT }

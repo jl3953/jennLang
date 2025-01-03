@@ -50,6 +50,7 @@ type expr =
   | EPollForResps of expr * expr
   | EPollForAnyResp of expr
   | ENextResp of expr
+  | EMin of expr * expr
 [@@deriving ord]
 
 type lhs =
@@ -139,6 +140,7 @@ let rec to_string_expr (e: expr) : string =
   | EPollForResps (e1, e2) -> "EPollForResps(" ^ (to_string_expr e1) ^ ", " ^ (to_string_expr e2) ^ ")"
   | EPollForAnyResp e -> "EPollForAnyResp(" ^ (to_string_expr e) ^ ")"
   | ENextResp e -> "NextResp(" ^ (to_string_expr e) ^ ")"
+  | EMin (e1, e2) -> "EMin(" ^ (to_string_expr e1) ^ ", " ^ (to_string_expr e2) ^ ")"
 
 let to_string_lhs (l: lhs) : string =
   match l with
@@ -277,10 +279,15 @@ let rec eval (env : record_env) (expr : expr) : value =
         begin match !l with 
           | [] -> failwith "Cannot index into empty list"
           | _ ->
-            begin match eval env k with 
-              | VInt i -> 
+            begin
+              match eval env k with 
+              | VInt i
+              | VNode i -> 
                 if i < 0 || i >= List.length !l then 
-                  failwith "idx out of range of VList"
+                  begin
+                    Printf.printf "idx %d, len %d\n" i (List.length !l);
+                    failwith "idx out of range of VList"
+                  end
                 else
                   List.nth !l i
               | _ -> failwith "Cannot index into a list with non-integer"
@@ -315,7 +322,8 @@ let rec eval (env : record_env) (expr : expr) : value =
       | _ -> failwith "EOr eval fail"
     end
   | EEqualsEquals (e1, e2) ->
-    begin match eval env e1, eval env e2 with
+    begin 
+      match eval env e1, eval env e2 with
       | VInt i1, VInt i2 -> VBool (i1 = i2)
       | VBool b1, VBool b2 -> VBool (b1 = b2)
       | VString s1, VString s2 -> VBool (s1 = s2)
@@ -443,7 +451,14 @@ let rec eval (env : record_env) (expr : expr) : value =
   | EMinus (e1, e2) ->
     begin match eval env e1, eval env e2 with
       | VInt i1, VInt i2 -> VInt (i1 - i2)
-      | _ -> failwith "EMinus eval fail"
+      | VInt _, _ -> failwith "EMinus VInt fail"
+      | VBool _, _ -> failwith "EMinus VBool fail"
+      | VFuture _, _ -> failwith "EMinus VFuture fail"
+      | VList _, _ -> failwith "EMinus VList fail"
+      | VMap _, _ -> failwith "EMinus VMap fail"
+      | VOption _, _ -> failwith "EMinus VOption fail"
+      | VNode _, _ -> failwith "EMinus VNode fail"
+      | VString _, _ -> failwith "EMinus VString fail"
     end
   | ETimes (e1, e2) ->
     begin match eval env e1, eval env e2 with
@@ -579,10 +594,12 @@ let rec eval (env : record_env) (expr : expr) : value =
           end
         in nxt_resp folded_map
       | _ -> failwith "ENextResp on non-collection"
-
     end
-
-
+  | EMin (e1, e2) ->
+    begin match eval env e1, eval env e2 with
+      | VInt i1, VInt i2 -> VInt (min i1 i2)
+      | _ -> failwith "EMin eval fail"
+    end
 
 let eval_lhs (env : record_env) (lhs : lhs) : lvalue =
   match lhs with
@@ -606,7 +623,8 @@ let store (lhs : lhs) (vl : value) (env : record_env) : unit =
     Hashtbl.replace table key vl
   | LVAccessList (idx, ref_l) ->
     begin match idx with
-      | VInt i -> 
+      | VInt i 
+      | VNode i -> 
         if i < 0 || i >= List.length !ref_l then 
           failwith "LVAccess idx out of range"
         else if List.length !ref_l == 0 then
