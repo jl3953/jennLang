@@ -1,0 +1,103 @@
+Node {
+
+    int self = 0;
+    List replicas = [];
+
+    List cmds = [];
+    int instance_num = -1;
+
+    func Init(me, peers) -> None {
+        self = me; 
+        instance_num = -1;
+
+        for (i = 0; i < len(peers); i = i+1) {
+            replicas = append(replicas, peers[i]);
+            cmds = append(cmds, []);
+        }
+    }
+
+    func NewEntry(cmd) -> bool {
+        instance_num = instance_num + 1;
+        seq = 1; // TODO there's stuff about dependencies here that I'm ignoring for now
+        deps = {}; // TODO more stuff about dependencies that I'm ignoring for now
+        cmds[self] = append(cmds[self], 
+            {   "cmd": cmd,
+                "seq": seq,
+                "deps": deps,
+                "status": "PREACCEPTED"
+            });
+        
+        resps = {};
+        for (i = 0; i < len(replicas); i = i+1) {
+            if (i != self) {
+                resps[replicas[i]] = rpc_async_call(i, PreAccept(self, cmd, seq, deps, instance_num));
+            }
+        }
+
+        // what's going on with the time out here?
+        recvd = 1;
+        fast_quorum = len(replicas)-1;
+        any = {};
+        for (i = 0; recvd >= fast_quorum; i = 0) {
+            await has_next_resp(resps);
+            any = next_resp(resps);
+            recvd = recvd + 1;
+
+            // TODO there's some stuff here about checking the responses
+        }
+
+        cmds[self][instance_num]["status"] = "COMMITTED";
+        for (i = 0; i < len(replicas); i = i + 1) {
+            if (i != self) {
+                rpc_async_call(i, Commit(self, cmd, seq, deps, instance_num));
+            } 
+        }
+
+        return true;
+    }
+
+    func PreAccept(sender, cmd, seq, deps, iL) -> bool {
+
+        seq = seq; // TODO there's some dependency stuff going on here that I ignored
+        deps = deps; // TODO there's some more dependency stuff here
+
+        for (placeholder = 0; len(cmds[sender]) <= iL; placeholder = 0) {
+            cmds[sender] = append(cmds[sender], {});
+        }
+        // TODO there's something here about an epoch number that I'm completely ignoring
+        cmds[sender][iL] = {   
+            "cmd": cmd,
+            "seq": seq,
+            "deps": deps,
+            "status": "PREACCEPTED"
+        };
+        return {
+            "type": "PreAcceptOK",
+            "cmd": cmd,
+            "seq": seq,
+            "deps": deps,
+            "instance_num": iL
+        };
+    }
+
+    func Commit(sender, cmd, seq, deps, iL) -> None {
+        cmds[sender][iL] = {
+            "cmd": cmd,
+            "seq": seq,
+            "deps": deps,
+            "status": "COMMITTED"
+        };
+    }
+}
+
+ClientInterface {
+
+    func init(dest, replicas) -> None {
+        rpc_call(dest, BASE_NODE_INIT());
+        rpc_async_call(dest, Init(dest, replicas));
+    }
+
+    func newEntry(dest, cmd) -> bool {
+        rpc_async_call(dest, NewEntry(cmd));
+    }
+}

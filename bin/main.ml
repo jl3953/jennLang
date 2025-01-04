@@ -414,11 +414,13 @@ let interp (spec : string) (intermediate_output : string) (scheduler_config_json
 
   (* schedule_client global_state prog "start" [VNode 0] 0; *)
 
-  schedule_client global_state prog "beginElection" [VNode 0] 0;
-  sync_exec global_state prog randomly_drop_msgs cut_tail_from_mid sever_all_to_tail_but_mid partition_away_nodes randomly_delay_msgs;
+  schedule_client global_state prog "newEntry" [VNode 0; VString "CMD"] 0;
+
+  (* schedule_client global_state prog "beginElection" [VNode 0] 0; *)
+  (* sync_exec global_state prog randomly_drop_msgs cut_tail_from_mid sever_all_to_tail_but_mid partition_away_nodes randomly_delay_msgs; *)
   (*schedule_client global_state prog "newEntry" [VNode 0; VString "WON_ELECTION"] 0;
   sync_exec global_state prog randomly_drop_msgs cut_tail_from_mid sever_all_to_tail_but_mid partition_away_nodes randomly_delay_msgs;*)
-  schedule_client global_state prog "newEntry" [VNode 0; VString "WRITE KEY"] 0;
+  (* schedule_client global_state prog "newEntry" [VNode 0; VString "WRITE KEY"] 0; *)
   (*schedule_client global_state prog "write" [VNode 0; VString "birthday"; VInt (increment_birthday())] 0;
     sync_exec global_state prog false false false [] false;
     print_endline "wrote 215";*)

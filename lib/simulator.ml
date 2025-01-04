@@ -153,7 +153,7 @@ let to_string(l: 'a label) : string =
   | Instr (i, _) -> 
     begin
       match i with 
-      | Async (_, _, f, _) -> "instr async to " ^ f
+      | Async (_, n, f, _) -> "instr async to " ^ (to_string_expr n) ^ " with " ^ f
       | Assign (lhs, expr) -> "Instr(Assign(" ^ to_string_lhs lhs ^ ", " ^ (to_string_expr expr) ^ "))"
       | Copy (_, _) -> "instr copy"
     end
@@ -669,7 +669,8 @@ let exec (state : state) (program : program) (record : record)  =
       begin match instruction with
         | Async (lhs, node, func, actuals) -> 
           begin match eval env node with
-            | VNode node_id ->
+            | VNode node_id
+            | VInt node_id ->
               let new_future = ref None in
               let { entry; formals; _ } = function_info func program in
               let new_env = Env.create 91 in
@@ -715,7 +716,6 @@ let exec (state : state) (program : program) (record : record)  =
               store lhs (VFuture new_future) env
             ; state.records <- new_record::state.records
             | VBool _ -> failwith "Type error bool"
-            | VInt _ -> failwith "Type error int"
             | VMap _ -> failwith "Type error map"
             | VList _ -> failwith "Type error list"
             | VOption _ -> failwith "Type error option"
@@ -892,8 +892,8 @@ let schedule_record (state : state) (program : program)
               | Async (_, node, _, _) -> 
                 let node_id = begin 
                   match eval env node with 
-                  | VNode n_id -> n_id
-                  | VInt _ -> failwith "Type error VInt!"
+                  | VNode n_id
+                  | VInt n_id -> n_id
                   | VBool _ -> failwith "Type error VBool!"
                   | VString _ -> failwith "Type error VString!"
                   | VMap _ -> failwith "Type error VMap!"
