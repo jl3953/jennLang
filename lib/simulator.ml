@@ -109,6 +109,7 @@ type 'a label =
   | Cond of expr * 'a * 'a
   | ForLoopIn of lhs * expr * 'a * 'a
   | Print of expr * 'a
+  | Break of 'a
 
 
 let rec to_string_expr (e: expr) : string =
@@ -163,6 +164,7 @@ let to_string(l: 'a label) : string =
   | Cond (expr, _, _)-> "Cond(" ^ (to_string_expr expr) ^ ", _, _)"
   | ForLoopIn _ -> "ForLoopIn"
   | Print _ -> "Print"
+  | Break _ -> "Break"
 
 let rec to_string_value (v: value) : string =
   match v with
@@ -696,6 +698,7 @@ let exec (state : state) (program : program) (record : record)  =
                     | Cond (_, _, e) -> traverse (CFG.label program.cfg e) (* TODO jenndebug this is incorrect, then clause missing *)
                     | ForLoopIn (_, _, b, n) -> (traverse (CFG.label program.cfg b)) @ (traverse (CFG.label program.cfg n))
                     | Print (_, n) -> traverse (CFG.label program.cfg n)
+                    | Break n -> traverse (CFG.label program.cfg n)
                   in 
                   let local_vars = traverse (CFG.label program.cfg entry) in
                   List.iter (fun (var, _) -> 
@@ -863,6 +866,7 @@ let exec (state : state) (program : program) (record : record)  =
       Printf.printf "%s\n" (to_string_value v);
       record.pc <- next;
       loop ()
+    | Break _ -> raise Halt
   in
   loop ()
 

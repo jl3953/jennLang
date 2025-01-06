@@ -78,6 +78,9 @@ and token = parse
   | "||" {OR}
   | "await" { AWAIT }
   | "append" { APPEND }
+  | "break" { BREAK }
+  | "case" { CASE }
+  | "default" { DEFAULT }
   | "else if" { ELSEIF }
   | "else" { ELSE }
   | "false" { FALSE false }
@@ -88,6 +91,7 @@ and token = parse
   | "in" { IN }
   | "len" { LEN }
   | "map" { MAP }
+  | "match" { MATCH }
   | "min" { MIN }
   | "Options" { OPTIONS }
   | "prepend" { PREPEND }
@@ -95,6 +99,7 @@ and token = parse
   | "poll_for_resps" { POLL_FOR_RESPS }
   | "has_next_resp" { POLL_FOR_ANY_RESP }
   | "next_resp" { NEXT_RESP}
+  | "set_timeout" { SET_TIMEOUT }
   | "return" { RETURN }
   | "rpc_async_call" { RPC_ASYNC_CALL}
   | "rpc_call" { RPC_CALL }

@@ -16,6 +16,11 @@ Node {
         }
     }
 
+    // TODO all right, there's gotta be a more elegant solution than this
+    func TIMEOUT() -> bool {
+        return {"type": "TIMEOUT"};
+    }
+
     func NewEntry(cmd) -> bool {
         instance_num = instance_num + 1;
         seq = 1; // TODO there's stuff about dependencies here that I'm ignoring for now
@@ -34,23 +39,39 @@ Node {
             }
         }
 
-        // what's going on with the time out here?
+        resps["timeout"] = set_timeout();
+
         recvd = 1;
+        timedout = false;
         fast_quorum = len(replicas)-1;
         any = {};
-        for (i = 0; recvd >= fast_quorum; i = 0) {
+        for (i = 0; (recvd < fast_quorum) && !timedout; i = 0) {
             await has_next_resp(resps);
             any = next_resp(resps);
-            recvd = recvd + 1;
+            print(any);
 
             // TODO there's some stuff here about checking the responses
-        }
+            match(any["type"]) {
+                case "PreAcceptOK":
+                    recvd = recvd + 1;
+                case "TIMEOUT":
+                    timedout = true;
+                default:
+                    print("default_notkeyword");
+            }
 
-        cmds[self][instance_num]["status"] = "COMMITTED";
-        for (i = 0; i < len(replicas); i = i + 1) {
-            if (i != self) {
-                rpc_async_call(i, Commit(self, cmd, seq, deps, instance_num));
-            } 
+            print(recvd);
+        }
+        
+        if (timedout) {
+            print("timedout");
+        } else {
+            cmds[self][instance_num]["status"] = "COMMITTED";
+            for (i = 0; i < len(replicas); i = i + 1) {
+                if (i != self) {
+                    rpc_async_call(i, Commit(self, cmd, seq, deps, instance_num));
+                } 
+            }
         }
 
         return true;

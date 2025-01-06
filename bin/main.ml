@@ -110,6 +110,7 @@ let rec convert_rhs (rhs : rhs) : Simulator.expr =
   | PollForAnyResp collection -> EPollForAnyResp(convert_rhs collection)
   | NextResp collection -> ENextResp(convert_rhs collection)
   | Min (first, second) -> EMin(convert_rhs first, convert_rhs second) 
+  | SetTimeout -> failwith "Already implemented SetTimeout in top level"
 
 let convert_lhs(lhs : Ast.lhs) : Simulator.lhs =
   match lhs with 
@@ -174,6 +175,7 @@ let rec generate_cfg_from_stmts (stmts : statement list) (cfg : CFG.t) (last_ver
                 let async_vertex = CFG.create_vertex cfg (Instr(Async(LVar "async_future", EVar "self", func_name, actuals), await_vertex)) in
                 CFG.create_vertex cfg (Pause async_vertex)
             end
+          | SetTimeout -> CFG.create_vertex cfg (Instr(Async(LVar "ret", EVar "self", "TIMEOUT", []), next_vert))
           | rhs -> CFG.create_vertex cfg (Instr(Assign(LVar "ret", convert_rhs rhs), next_vert))
         end
       | Return exp -> 
@@ -196,6 +198,10 @@ let rec generate_cfg_from_stmts (stmts : statement list) (cfg : CFG.t) (last_ver
       | Comment -> generate_cfg_from_stmts rest cfg last_vert
       | Await exp -> CFG.create_vertex cfg (Await(LVar "ret", convert_rhs exp, next_vert))
       | Print exp -> CFG.create_vertex cfg (Print(convert_rhs exp, next_vert))
+      | Match (exp, cases) -> 
+        let vert, _ = generate_cfg_from_match_stmt exp cases cfg last_vert in
+        vert
+      | BreakStmt -> CFG.create_vertex cfg (Break(last_vert))
     end
 
 and generate_cfg_from_cond_stmts (cond_stmts : cond_stmt list) (cfg : CFG.t) (next : CFG.vertex) : CFG.vertex =
@@ -209,6 +215,19 @@ and generate_cfg_from_cond_stmts (cond_stmts : cond_stmt list) (cfg : CFG.t) (ne
           CFG.create_vertex cfg (Cond(convert_rhs cond, body_vert, elseif_vert))
       end
   end
+
+and generate_cfg_from_match_stmt (match_exp : rhs) (cases : case_stmt list) 
+    (cfg : CFG.t) (last: CFG.vertex) : (CFG.vertex * CFG.vertex) =
+  match cases with 
+  | [] -> failwith "No cases in match statement"
+  | DefaultStmt(stmts) :: _ -> 
+    let body_vert = generate_cfg_from_stmts stmts cfg last in
+    body_vert, body_vert
+  | CaseStmt(case_cond, stmts) :: rest ->
+    let next_case_vert, next_body = generate_cfg_from_match_stmt match_exp rest cfg last in
+    let body_vert = if List.length(stmts) = 0 then next_body else generate_cfg_from_stmts stmts cfg last in
+    let case_vert = CFG.create_vertex cfg (Cond(EEqualsEquals(convert_rhs match_exp, convert_rhs case_cond), body_vert, next_case_vert)) in
+    case_vert, body_vert
 
 let process_func_def (func_def : func_def) (cfg : CFG.t) : function_info =
   match func_def with
@@ -240,6 +259,9 @@ let rec process_inits (inits : var_init list) (cfg : CFG.t) : CFG.vertex =
       | VarInit(_, var_name, rhs) -> 
         CFG.create_vertex cfg (Instr(Assign(LVar var_name, convert_rhs rhs), next_vert))
     end
+(* 
+let timeout_func (cfg : CFG.t) : CFG.vertex = 
+  CFG.create_vertex cfg (Return(EBool true)) *)
 
 let process_role (role_def : role_def) (cfg : CFG.t) : function_info list = 
   match role_def with
@@ -251,9 +273,17 @@ let process_role (role_def : role_def) (cfg : CFG.t) : function_info list =
       ; name = init_func_name
       ; formals = []
       ; locals = []
-      } 
-    and func_infos = List.map (fun func_def -> process_func_def func_def cfg) func_defs in
-    init_func_info :: func_infos
+      } in
+    (*let timeout_vert = timeout_func cfg in
+      let timeout_func_name = "TIMEOUT" in
+      let timeout_info = 
+      { entry = timeout_vert
+      ; name = timeout_func_name
+      ; formals = []
+      ; locals = []
+      } in*)
+    let func_infos = List.map (fun func_def -> process_func_def func_def cfg) func_defs in
+    (*timeout_info::*)init_func_info :: func_infos
 
 
 let process_client_intf (client_intf: client_def) (cfg : CFG.t) : function_info list = 
@@ -419,7 +449,7 @@ let interp (spec : string) (intermediate_output : string) (scheduler_config_json
   (* schedule_client global_state prog "beginElection" [VNode 0] 0; *)
   (* sync_exec global_state prog randomly_drop_msgs cut_tail_from_mid sever_all_to_tail_but_mid partition_away_nodes randomly_delay_msgs; *)
   (*schedule_client global_state prog "newEntry" [VNode 0; VString "WON_ELECTION"] 0;
-  sync_exec global_state prog randomly_drop_msgs cut_tail_from_mid sever_all_to_tail_but_mid partition_away_nodes randomly_delay_msgs;*)
+    sync_exec global_state prog randomly_drop_msgs cut_tail_from_mid sever_all_to_tail_but_mid partition_away_nodes randomly_delay_msgs;*)
   (* schedule_client global_state prog "newEntry" [VNode 0; VString "WRITE KEY"] 0; *)
   (*schedule_client global_state prog "write" [VNode 0; VString "birthday"; VInt (increment_birthday())] 0;
     sync_exec global_state prog false false false [] false;

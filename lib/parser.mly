@@ -11,10 +11,13 @@
 %token ARROW
 %token AWAIT
 %token BANG
+%token BREAK
+%token CASE
 %token CLIENT_INTERFACE
 %token COLON
 %token COMMA
 (*%token DOT*)
+%token DEFAULT
 %token EQUALS
 %token EQUALS_EQUALS
 %token FOR
@@ -44,8 +47,10 @@
 %token RPC_ASYNC_CALL
 %token RPC_CALL
 %token SEMICOLON
+%token SET_TIMEOUT
 %token SLASH
 %token STAR
+%token MATCH
 %token TAIL
 %token QUOTE
 %token EOF
@@ -248,8 +253,6 @@ boolean:
     { GreaterThan (rhs1, rhs2)}
   | rhs1 = right_side RIGHT_ANGLE_BRACKET_EQUALS rhs2 = right_side
     { GreaterThanEquals (rhs1, rhs2)}
-  | LEFT_PAREN b = boolean RIGHT_PAREN
-    { b }
 
 list_lit:
   | LEFT_SQUARE_BRACKET RIGHT_SQUARE_BRACKET
@@ -308,12 +311,26 @@ right_side:
     { NextResp(resps) }
   | MIN LEFT_PAREN f = right_side COMMA s = right_side RIGHT_PAREN
     { Min(f, s) }
+  | SET_TIMEOUT LEFT_PAREN RIGHT_PAREN
+    { SetTimeout }
+  | LEFT_PAREN r = right_side RIGHT_PAREN
+    { r }
   (*| rhs = right_side DOT key = ID
     { FieldAccessRHS(rhs, key) }*)
 
 assignment:
   | lhs = left_side EQUALS rhs = right_side
     { Assignment(lhs, rhs) }
+
+case_stmt:
+  | CASE rhs = right_side COLON stmts = statements
+    { CaseStmt(rhs, stmts) }
+
+case_stmts:
+  | DEFAULT COLON stmts = statements
+    { DefaultStmt(stmts) :: [] }
+  | c = case_stmt cs = case_stmts
+    { c :: cs }
 
 statement:
   | cond_stmts = cond_stmts
@@ -339,6 +356,12 @@ statement:
     { Await(r) }
   | PRINT LEFT_PAREN r = right_side RIGHT_PAREN SEMICOLON
     { Print(r) }
+  | MATCH LEFT_PAREN cond = right_side RIGHT_PAREN LEFT_CURLY_BRACE
+    cases = case_stmts
+    RIGHT_CURLY_BRACE
+    { Match(cond, cases) }
+  | BREAK SEMICOLON
+    { BreakStmt }
 
 params:
   | rhs = right_side

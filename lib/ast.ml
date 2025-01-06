@@ -45,6 +45,7 @@ and rhs =
   | PollForAnyResp of rhs
   | NextResp of rhs
   | Min of rhs * rhs
+  | SetTimeout
 
 and collection = 
   | MapLit of (rhs * rhs) list
@@ -75,6 +76,10 @@ and lhs =
 (* list of condition to be evaluated * statement body, else condition is just true*)
 type cond_stmt = IfElseIf of rhs * statement list 
 
+and case_stmt = 
+  | CaseStmt of rhs * statement list
+  | DefaultStmt of statement list
+
 and assignment = Assignment of lhs * rhs
 
 and statement =
@@ -87,6 +92,8 @@ and statement =
   | Comment
   | Await of rhs
   | Print of rhs
+  | Match of rhs * case_stmt list
+  | BreakStmt 
 
 type func_def = FuncDef of func_call * type_def * statement list
 
