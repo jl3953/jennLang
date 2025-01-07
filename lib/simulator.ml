@@ -41,6 +41,7 @@ type expr =
   | ELessThanEquals of expr * expr
   | EGreaterThan of expr * expr
   | EGreaterThanEquals of expr * expr
+  | EKeyExists of expr * expr
   | EListLen of expr
   | EListAccess of expr * int
   | EPlus of expr * expr
@@ -132,6 +133,7 @@ let rec to_string_expr (e: expr) : string =
   | ELessThanEquals (e1, e2) -> "ELessThanEquals(" ^ (to_string_expr e1) ^ ", " ^ (to_string_expr e2) ^ ")"
   | EGreaterThan (e1, e2) -> "EGreaterThan(" ^ (to_string_expr e1) ^ ", " ^ (to_string_expr e2) ^ ")"
   | EGreaterThanEquals (e1, e2) -> "EGreaterThanEquals(" ^ (to_string_expr e1) ^ ", " ^ (to_string_expr e2) ^ ")"
+  | EKeyExists (k, mp) -> "EKeyExists(" ^ (to_string_expr k) ^ ", " ^ (to_string_expr mp) ^ ")"
   | EListLen e -> "EListLen(" ^ (to_string_expr e) ^ ")"
   | EListAccess (e, i) -> "EListAccess(" ^ (to_string_expr e) ^ ", " ^ (string_of_int i) ^ ")"
   | EPlus (e1, e2) -> "EPlus(" ^ (to_string_expr e1) ^ ", " ^ (to_string_expr e2) ^ ")"
@@ -298,9 +300,9 @@ let rec eval (env : record_env) (expr : expr) : value =
       | VString s -> 
         begin match load s env with
           | VMap map -> Hashtbl.find map (eval env k)
-          | _ -> failwith "EFind eval fail"
+          | _ -> failwith "EFind eval fail: cannot index into anything else but map with string"
         end
-      | _ -> failwith "EFind eval fail"
+      | _ -> failwith "EFind eval fail: collection is not map nor string"
     end
   | ENot e -> 
     begin match eval env e with
@@ -334,7 +336,17 @@ let rec eval (env : record_env) (expr : expr) : value =
       | VInt i, VNode n -> VBool (i = n)
       | VMap _, _ -> failwith "EEqualsEquals fails with map"
       | VFuture _, _ -> failwith "EEqualsEquals fails with VFuture"
-      | VList _, _ -> failwith "EEqualsEquals fails with list"
+      | VList l1, VList l2 -> 
+        let rec list_eq (l1 : value list) (l2 : value list) : bool =
+          begin match l1, l2 with
+            | [], [] -> true
+            | [], _ -> false
+            | _, [] -> false
+            | hd1 :: tl1, hd2 :: tl2 -> 
+              if hd1 = hd2 then list_eq tl1 tl2
+              else false
+          end in VBool (list_eq !l1 !l2)
+      | VList _, _ -> failwith "EEqualsEquals fails with VList, not VList"
       | VOption _, _ -> failwith "EEqualsEquals fails with option"
       | VInt i, other -> 
         begin match other with
@@ -421,6 +433,11 @@ let rec eval (env : record_env) (expr : expr) : value =
     begin match eval env e1, eval env e2 with
       | VInt i1, VInt i2 -> VBool (i1 >= i2)
       | _ -> failwith "EGreaterThanEquals eval fail"
+    end
+  | EKeyExists (key, mp) ->
+    begin match eval env key, eval env mp with
+      | k, VMap m -> VBool (Hashtbl.mem m k)
+      | _ -> failwith "EKeyExists eval fail"
     end
   | EListLen e ->
     begin match eval env e with
@@ -607,7 +624,8 @@ let eval_lhs (env : record_env) (lhs : lhs) : lvalue =
   match lhs with
   | LVar var -> LVVar var
   | LAccess (collection, exp) ->
-    begin match eval env collection with
+    begin 
+      match eval env collection with
       | VMap map -> LVAccess (eval env exp, map)
       | VList l -> LVAccessList (eval env exp, l)
       | _ -> failwith "LAccess can't index into non-collection types"
@@ -673,51 +691,53 @@ let exec (state : state) (program : program) (record : record)  =
           begin match eval env node with
             | VNode node_id
             | VInt node_id ->
-              let new_future = ref None in
-              let { entry; formals; _ } = function_info func program in
-              let new_env = Env.create 91 in
-              List.iter2 (fun (formal, _) actual ->
-                  Env.add new_env formal (eval env actual)) formals actuals;
               begin
-                if func <> "BASE_NODE_INIT" then
-                  let rec traverse (label : 'a label) : (string * expr) list =
-                    match label with
-                    | Instr (i, n) ->
-                      begin match i with
-                        | Assign (lhs, expr) -> 
-                          (* Printf.printf "JENNDEBUGDERP lhs %s, expr %s\n" (to_string_lhs lhs) (to_string_expr expr); *)
-                          begin match lhs with
-                            | LVar var -> (var, expr) :: traverse (CFG.label program.cfg n)
-                            | _ -> traverse (CFG.label program.cfg n)
-                          end
-                        | _ -> traverse (CFG.label program.cfg n)
-                      end
-                    | Pause n -> traverse (CFG.label program.cfg n)
-                    | Await (_, _, n) -> traverse (CFG.label program.cfg n)
-                    | Return _ -> []
-                    | Cond (_, _, e) -> traverse (CFG.label program.cfg e) (* TODO jenndebug this is incorrect, then clause missing *)
-                    | ForLoopIn (_, _, b, n) -> (traverse (CFG.label program.cfg b)) @ (traverse (CFG.label program.cfg n))
-                    | Print (_, n) -> traverse (CFG.label program.cfg n)
-                    | Break n -> traverse (CFG.label program.cfg n)
-                  in 
-                  let local_vars = traverse (CFG.label program.cfg entry) in
-                  List.iter (fun (var, _) -> 
-                      if not((Env.mem state.nodes.(node_id) var) 
-                             || (Env.mem new_env var)) then
-                        Env.add new_env var (VBool false)
-                    ) local_vars
-              end;
-              let new_record =
-                { node = node_id
-                ; pc = entry
-                ; continuation = (fun value -> new_future := Some value)
-                ; env = new_env
-                ; id = record.id
-                ; x = record.x
-                ; f = record.f }
-              in
-              store lhs (VFuture new_future) env
-            ; state.records <- new_record::state.records
+                let new_future = ref None in
+                let { entry; formals; _ } = function_info func program in
+                let new_env = Env.create 91 in
+                List.iter2 (fun (formal, _) actual ->
+                    Env.add new_env formal (eval env actual)) formals actuals;
+                begin
+                  if func <> "BASE_NODE_INIT" then
+                    let rec traverse (label : 'a label) : (string * expr) list =
+                      match label with
+                      | Instr (i, n) ->
+                        begin match i with
+                          | Assign (lhs, expr) -> 
+                            (* Printf.printf "JENNDEBUGDERP lhs %s, expr %s\n" (to_string_lhs lhs) (to_string_expr expr); *)
+                            begin match lhs with
+                              | LVar var -> (var, expr) :: traverse (CFG.label program.cfg n)
+                              | _ -> traverse (CFG.label program.cfg n)
+                            end
+                          | _ -> traverse (CFG.label program.cfg n)
+                        end
+                      | Pause n -> traverse (CFG.label program.cfg n)
+                      | Await (_, _, n) -> traverse (CFG.label program.cfg n)
+                      | Return _ -> []
+                      | Cond (_, _, e) -> traverse (CFG.label program.cfg e) (* TODO jenndebug this is incorrect, then clause missing *)
+                      | ForLoopIn (_, _, b, n) -> (traverse (CFG.label program.cfg b)) @ (traverse (CFG.label program.cfg n))
+                      | Print (_, n) -> traverse (CFG.label program.cfg n)
+                      | Break n -> traverse (CFG.label program.cfg n)
+                    in 
+                    let local_vars = traverse (CFG.label program.cfg entry) in
+                    List.iter (fun (var, _) -> 
+                        if not((Env.mem state.nodes.(node_id) var) 
+                               || (Env.mem new_env var)) then
+                          Env.add new_env var (VBool false)
+                      ) local_vars
+                end;
+                let new_record =
+                  { node = node_id
+                  ; pc = entry
+                  ; continuation = (fun value -> new_future := Some value)
+                  ; env = new_env
+                  ; id = record.id
+                  ; x = record.x
+                  ; f = record.f }
+                in
+                store lhs (VFuture new_future) env
+              ; state.records <- new_record::state.records
+              end
             | VBool _ -> failwith "Type error bool"
             | VMap _ -> failwith "Type error map"
             | VList _ -> failwith "Type error list"
@@ -748,8 +768,10 @@ let exec (state : state) (program : program) (record : record)  =
               end
           end
         | Assign (lhs, rhs) -> 
-          store lhs (eval env rhs) env;
-        | Copy (lhs, rhs) -> copy lhs (eval env rhs) env;
+          begin
+            store lhs (eval env rhs) env
+          end
+        | Copy (lhs, rhs) -> copy lhs (eval env rhs) env
       end;
       loop ()
     | Cond (cond, bthen, belse) -> 

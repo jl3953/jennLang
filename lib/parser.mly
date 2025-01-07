@@ -20,6 +20,7 @@
 %token DEFAULT
 %token EQUALS
 %token EQUALS_EQUALS
+%token EXISTS
 %token FOR
 %token FUNC
 %token HEAD
@@ -61,7 +62,7 @@
 %left OR
 %left STAR SLASH
 %left PLUS MINUS
-%nonassoc EQUALS_EQUALS NOT_EQUALS LEFT_ANGLE_BRACKET RIGHT_ANGLE_BRACKET LEFT_ANGLE_BRACKET_EQUALS RIGHT_ANGLE_BRACKET_EQUALS
+%nonassoc EQUALS_EQUALS NOT_EQUALS LEFT_ANGLE_BRACKET RIGHT_ANGLE_BRACKET LEFT_ANGLE_BRACKET_EQUALS RIGHT_ANGLE_BRACKET_EQUALS EXISTS
 // %left COMMA
 
 %type <Ast.prog> program
@@ -126,11 +127,11 @@ cond_stmts:
   | i = if_stmt ELSE LEFT_CURLY_BRACE
     else_body = statements
     RIGHT_CURLY_BRACE
-    { i :: [IfElseIf(BoolRHS(Bool(true)), else_body)] }
+    { i :: [IfElseIf(Bool(true), else_body)] }
   | i = if_stmt el = elseif_stmts ELSE LEFT_CURLY_BRACE
     else_body = statements
     RIGHT_CURLY_BRACE
-    { i :: el @ [IfElseIf(BoolRHS(Bool(true)), else_body)] }
+    { i :: el @ [IfElseIf(Bool(true), else_body)] }
 
 rpc_call:
   | RPC_CALL LEFT_PAREN host = ID COMMA func_call = func_call RIGHT_PAREN
@@ -230,30 +231,6 @@ left_side:
     { TupleLHS(l_items) }
 
 
-boolean:
-  | TRUE 
-    { Bool true }
-  | FALSE
-    { Bool false }
-  | BANG rhs = right_side
-    { Not rhs }
-  | b1 = right_side AND b2 = right_side
-    { And (b1, b2) }
-  | b1 = right_side OR b2 = right_side
-    { Or (b1, b2) }
-  | rhs1 = right_side EQUALS_EQUALS rhs2 = right_side
-    { EqualsEquals (rhs1, rhs2)}
-  | rhs1 = right_side NOT_EQUALS rhs2 = right_side
-    { NotEquals (rhs1, rhs2)}
-  | rhs1 = right_side LEFT_ANGLE_BRACKET rhs2 = right_side
-    { LessThan (rhs1, rhs2)}
-  | rhs1 = right_side LEFT_ANGLE_BRACKET_EQUALS rhs2 = right_side
-    { LessThanEquals (rhs1, rhs2)}
-  | rhs1 = right_side RIGHT_ANGLE_BRACKET rhs2 = right_side
-    { GreaterThan (rhs1, rhs2)}
-  | rhs1 = right_side RIGHT_ANGLE_BRACKET_EQUALS rhs2 = right_side
-    { GreaterThanEquals (rhs1, rhs2)}
-
 list_lit:
   | LEFT_SQUARE_BRACKET RIGHT_SQUARE_BRACKET
     { ListLit([]) }
@@ -277,6 +254,30 @@ list_ops:
 right_side:
   | id = ID
     { VarRHS(id) }
+  | TRUE 
+    { Bool true }
+  | FALSE
+    { Bool false }
+  | BANG rhs = right_side
+    { Not rhs }
+  | b1 = right_side AND b2 = right_side
+    { And (b1, b2) }
+  | b1 = right_side OR b2 = right_side
+    { Or (b1, b2) }
+  | rhs1 = right_side EQUALS_EQUALS rhs2 = right_side
+    { EqualsEquals (rhs1, rhs2)}
+  | rhs1 = right_side NOT_EQUALS rhs2 = right_side
+    { NotEquals (rhs1, rhs2)}
+  | rhs1 = right_side LEFT_ANGLE_BRACKET rhs2 = right_side
+    { LessThan (rhs1, rhs2)}
+  | rhs1 = right_side LEFT_ANGLE_BRACKET_EQUALS rhs2 = right_side
+    { LessThanEquals (rhs1, rhs2)}
+  | rhs1 = right_side RIGHT_ANGLE_BRACKET rhs2 = right_side
+    { GreaterThan (rhs1, rhs2)}
+  | rhs1 = right_side RIGHT_ANGLE_BRACKET_EQUALS rhs2 = right_side
+    { GreaterThanEquals (rhs1, rhs2)}
+  | key = right_side EXISTS mp = right_side
+    { KeyExists(key, mp) }
   // | mapName = ID LEFT_SQUARE_BRACKET key = ID RIGHT_SQUARE_BRACKET
   //   { MapAccessRHS(mapName, key) }
   // | ls = right_side LEFT_SQUARE_BRACKET idx = INT RIGHT_SQUARE_BRACKET
@@ -287,8 +288,6 @@ right_side:
     { FuncCallRHS(func_call)}
   | literal = literals
     { LiteralRHS(literal) }
-  | b = boolean
-    { BoolRHS b }
   | c = collection
     { CollectionRHS c }
   | rpc_call = rpc_call

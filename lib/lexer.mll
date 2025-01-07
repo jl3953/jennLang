@@ -83,6 +83,7 @@ and token = parse
   | "default" { DEFAULT }
   | "else if" { ELSEIF }
   | "else" { ELSE }
+  | "exists" { EXISTS }
   | "false" { FALSE false }
   | "for" { FOR }
   | "func" { FUNC }

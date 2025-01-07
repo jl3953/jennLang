@@ -21,67 +21,136 @@ Node {
         return {"type": "TIMEOUT"};
     }
 
-    func NewEntry(cmd) -> bool {
+    func NewEntry(cmd, key) -> bool {
+        
+        // 1: increment instance number iL <- iL + 1
         instance_num = instance_num + 1;
-        seq = 1; // TODO there's stuff about dependencies here that I'm ignoring for now
-        deps = {}; // TODO more stuff about dependencies that I'm ignoring for now
+        iL = instance_num;
+
+        // 2: seq <- 1 + max({seq nums of all interfering i.e. dependency commands} UNION {0})
+        // 3: deps <- InterfL
+        seq = 1;
+        deps = [];
+        log = {}; // hoisted
+        for (replica = 0; replica < len(cmds); replica = replica + 1) {
+            deps = append(deps, {});
+            for (inst_num = 0; inst_num < len(cmds[replica]); inst_num = inst_num + 1) {
+                log = cmds[replica][inst_num];
+                if (("key" exists log) && (log["key"] == key)) {
+                    deps[replica][inst_num] = {
+                        "cmd": log["cmd"],
+                        "seq": log["seq"],
+                        "key": log["key"]
+                    };
+                    if (log["seq"] >= seq) {
+                        seq = log["seq"] + 1;
+                    }
+                }
+            }
+        }
+
+        // 4: cmdsL[L][iL] <- (cmd, seq, deps, pre-accepted)
         cmds[self] = append(cmds[self], 
             {   "cmd": cmd,
                 "seq": seq,
                 "deps": deps,
-                "status": "PREACCEPTED"
+                "status": "PREACCEPTED",
+                "key": key
             });
         
+        // 5: send pre-accept(cmd, seq, deps, L.iL) to all other replicas in F, where F is a fast fast_quorum
+        // that includes L
         resps = {};
         for (i = 0; i < len(replicas); i = i+1) {
             if (i != self) {
-                resps[replicas[i]] = rpc_async_call(i, PreAccept(self, cmd, seq, deps, instance_num));
+                resps[replicas[i]] = rpc_async_call(i, PreAccept(self, cmd, key, seq, deps, iL));
             }
         }
 
-        resps["timeout"] = set_timeout();
+        //resps["timeout"] = set_timeout();
 
         recvd = 1;
         timedout = false;
         fast_quorum = len(replicas)-1;
         any = {};
+        fast_path = true;
+        preacceptoks = [];
+        for (i = 0; i < len(replicas); i = i+1) {
+            preacceptoks = append(preacceptoks, {});
+        }
         for (i = 0; (recvd < fast_quorum) && !timedout; i = 0) {
             await has_next_resp(resps);
             any = next_resp(resps);
-            print(any);
 
             // TODO there's some stuff here about checking the responses
             match(any["type"]) {
                 case "PreAcceptOK":
                     recvd = recvd + 1;
+                    if ((any["seq"] != seq) || (any["deps"] != deps)) {
+                        fast_path = false;
+                        print("NO_FAST_PATH");
+                        print("SEQ_NUM");
+                        print(any["seq"]);
+                        print(seq);
+                        print("DEPS");
+                        print(any["deps"]);
+                        print(deps);
+                        print("OKKKKKKKKK");
+                        preacceptoks[any["sender"]] = any;
+                    }
                 case "TIMEOUT":
                     timedout = true;
                 default:
                     print("default_notkeyword");
             }
-
-            print(recvd);
         }
         
         if (timedout) {
             print("timedout");
-        } else {
-            cmds[self][instance_num]["status"] = "COMMITTED";
+            print(key);
+        } else if (fast_path) {
+            cmds[self][iL]["status"] = "COMMITTED";
             for (i = 0; i < len(replicas); i = i + 1) {
                 if (i != self) {
-                    rpc_async_call(i, Commit(self, cmd, seq, deps, instance_num));
+                    rpc_async_call(i, Commit(self, cmd, key, seq, deps, iL));
                 } 
             }
+        } else {
+            print("nofastpath");
+            print(preacceptoks);
         }
 
         return true;
     }
 
-    func PreAccept(sender, cmd, seq, deps, iL) -> bool {
+    func PreAccept(sender, cmd, key, seq, deps, iL) -> bool {
 
-        seq = seq; // TODO there's some dependency stuff going on here that I ignored
-        deps = deps; // TODO there's some more dependency stuff here
+        // 6: update seq <- max({seq} UNION {seq nums from all dependencies on this replica})
+        // 7: update deps <- deps UNION Interf
+        seqR = 1;
+        log = {};
+        for (replica = 0; replica < len(cmds); replica = replica + 1) {
+            for (inst_num = 0; inst_num < len(cmds[replica]); inst_num = inst_num + 1) {
+                log = cmds[replica][inst_num];
+                if (("key" exists log) && (log["key"] == key)) {
+                    if (!(inst_num exists (deps[replica]))) {
+                        deps[replica][inst_num] = {
+                            "cmd": log["cmd"],
+                            "seq": log["seq"],
+                            "key": log["key"]
+                        };
+                    }
+                    if (log["seq"] >= seqR) {
+                        seqR = log["seq"] + 1;
+                    }
+                }
+            }
+        }
+        if (seqR > seq) {
+            seq = seqR;
+        }
 
+        // 8: cmdsR[L][i] <- (cmd, seq, deps, pre-accepted)
         for (placeholder = 0; len(cmds[sender]) <= iL; placeholder = 0) {
             cmds[sender] = append(cmds[sender], {});
         }
@@ -90,23 +159,32 @@ Node {
             "cmd": cmd,
             "seq": seq,
             "deps": deps,
-            "status": "PREACCEPTED"
+            "status": "PREACCEPTED",
+            "key": key
         };
+        
+        // 9: reply PreAcceptOk(cmd, seq, deps, L.i) to L
         return {
             "type": "PreAcceptOK",
             "cmd": cmd,
             "seq": seq,
             "deps": deps,
-            "instance_num": iL
+            "instance_num": iL,
+            "sender": self
         };
     }
 
-    func Commit(sender, cmd, seq, deps, iL) -> None {
+    func Commit(sender, cmd, key, seq, deps, iL) -> None {
+        for (placeholder = 0; len(cmds[sender]) <= iL; placeholder = 0) {
+            cmds[sender] = append(cmds[sender], {});
+        }
+
         cmds[sender][iL] = {
             "cmd": cmd,
             "seq": seq,
             "deps": deps,
-            "status": "COMMITTED"
+            "status": "COMMITTED",
+            "key": key
         };
     }
 }
@@ -118,7 +196,7 @@ ClientInterface {
         rpc_async_call(dest, Init(dest, replicas));
     }
 
-    func newEntry(dest, cmd) -> bool {
-        rpc_async_call(dest, NewEntry(cmd));
+    func newEntry(dest, cmd, key) -> bool {
+        rpc_async_call(dest, NewEntry(cmd, key));
     }
 }

@@ -5,32 +5,30 @@ type option = Option of string
 type type_def =
   | CustomType of string
   | MapType of type_def * type_def
-(* 
+  (* 
 type lhs =
   | VarLHS of string
   | MapAccessLHS of string * string *)
-
-type boolean =
-| Bool of bool
-| Not of rhs
-| And of rhs * rhs
-| Or of rhs * rhs
-| EqualsEquals of rhs * rhs
-| NotEquals of rhs * rhs
-| LessThan of rhs * rhs
-| LessThanEquals of rhs * rhs
-| GreaterThan of rhs * rhs
-| GreaterThanEquals of rhs * rhs
 
 and collection_access = CollectionAccess of rhs * rhs
 
 and rhs = 
   | VarRHS of string
+  | Bool of bool
+  | Not of rhs
+  | And of rhs * rhs
+  | Or of rhs * rhs
+  | EqualsEquals of rhs * rhs
+  | NotEquals of rhs * rhs
+  | LessThan of rhs * rhs
+  | LessThanEquals of rhs * rhs
+  | GreaterThan of rhs * rhs
+  | GreaterThanEquals of rhs * rhs
+  | KeyExists of rhs * rhs
   | CollectionAccessRHS of collection_access
   | FuncCallRHS of func_call
   | LiteralRHS of literal 
   | FieldAccessRHS of rhs * string
-  | BoolRHS of boolean
   | CollectionRHS of collection
   | RpcCallRHS of rpc_call
   | Head of rhs

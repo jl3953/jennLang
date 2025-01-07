@@ -76,19 +76,17 @@ let rec convert_rhs (rhs : rhs) : Simulator.expr =
       | Int i -> EInt(i)
     end
   | FieldAccessRHS _ -> failwith "Didn't implement FieldAccessRHS yet"
-  | BoolRHS boolean ->
-    begin match boolean with
-      | Bool b -> EBool(b)
-      | Not rhs -> ENot (convert_rhs rhs)
-      | Or (rhs1, rhs2) -> EOr(convert_rhs rhs1, convert_rhs rhs2)
-      | And (b1, b2) -> EAnd(convert_rhs b1, convert_rhs b2)
-      | EqualsEquals (rhs1, rhs2) -> EEqualsEquals(convert_rhs rhs1, convert_rhs rhs2)
-      | NotEquals (b1, b2) -> ENot(EEqualsEquals(convert_rhs b1, convert_rhs b2))
-      | LessThan (rhs1, rhs2) -> ELessThan(convert_rhs rhs1, convert_rhs rhs2)
-      | LessThanEquals (rhs1, rhs2) -> ELessThanEquals(convert_rhs rhs1, convert_rhs rhs2)
-      | GreaterThan (rhs1, rhs2) -> EGreaterThan(convert_rhs rhs1, convert_rhs rhs2)
-      | GreaterThanEquals (rhs1, rhs2) -> EGreaterThanEquals(convert_rhs rhs1, convert_rhs rhs2)
-    end 
+  | Bool b -> EBool(b)
+  | Not rhs -> ENot (convert_rhs rhs)
+  | Or (rhs1, rhs2) -> EOr(convert_rhs rhs1, convert_rhs rhs2)
+  | And (b1, b2) -> EAnd(convert_rhs b1, convert_rhs b2)
+  | EqualsEquals (rhs1, rhs2) -> EEqualsEquals(convert_rhs rhs1, convert_rhs rhs2)
+  | NotEquals (b1, b2) -> ENot(EEqualsEquals(convert_rhs b1, convert_rhs b2))
+  | LessThan (rhs1, rhs2) -> ELessThan(convert_rhs rhs1, convert_rhs rhs2)
+  | LessThanEquals (rhs1, rhs2) -> ELessThanEquals(convert_rhs rhs1, convert_rhs rhs2)
+  | GreaterThan (rhs1, rhs2) -> EGreaterThan(convert_rhs rhs1, convert_rhs rhs2)
+  | GreaterThanEquals (rhs1, rhs2) -> EGreaterThanEquals(convert_rhs rhs1, convert_rhs rhs2)
+  | KeyExists (key, mp) -> EKeyExists(convert_rhs key, convert_rhs mp)
   | CollectionRHS collection_lit ->
     begin match collection_lit with
       | MapLit kvpairs -> EMap (List.map (fun (k, v) -> (convert_rhs k, convert_rhs v)) kvpairs)
@@ -444,7 +442,10 @@ let interp (spec : string) (intermediate_output : string) (scheduler_config_json
 
   (* schedule_client global_state prog "start" [VNode 0] 0; *)
 
-  schedule_client global_state prog "newEntry" [VNode 0; VString "CMD"] 0;
+  schedule_client global_state prog "newEntry" [VNode 0; VString "FIRST"; VInt 214] 0;
+  (* sync_exec global_state prog randomly_drop_msgs cut_tail_from_mid sever_all_to_tail_but_mid partition_away_nodes randomly_delay_msgs; *)
+  (* schedule_client global_state prog "newEntry" [VNode 2; VString "OTHERCMD"; VInt 215] 0; *)
+  schedule_client global_state prog "newEntry" [VNode 1; VString "SECOND"; VInt 214] 0;
 
   (* schedule_client global_state prog "beginElection" [VNode 0] 0; *)
   (* sync_exec global_state prog randomly_drop_msgs cut_tail_from_mid sever_all_to_tail_but_mid partition_away_nodes randomly_delay_msgs; *)
