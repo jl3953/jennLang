@@ -82,6 +82,7 @@ and assignment = Assignment of lhs * rhs
 
 and statement =
   | CondList of cond_stmt list 
+  | VarDeclInit of string * rhs
   | AssignmentStmt of assignment
   | Expr of rhs
   | Return of rhs

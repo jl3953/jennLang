@@ -54,6 +54,7 @@
 %token MATCH
 %token TAIL
 %token QUOTE
+%token VAR
 %token EOF
 
 %left LEFT_SQUARE_BRACKET
@@ -334,6 +335,8 @@ case_stmts:
 statement:
   | cond_stmts = cond_stmts
     { CondList(cond_stmts)}
+  | VAR id = ID EQUALS rhs = right_side SEMICOLON
+    { VarDeclInit(id, rhs) }
   | a = assignment SEMICOLON
     { AssignmentStmt(a) }
   | r = right_side SEMICOLON

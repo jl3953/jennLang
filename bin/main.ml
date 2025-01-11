@@ -131,12 +131,13 @@ let rec generate_cfg_from_stmts (stmts : statement list) (cfg : CFG.t) (last_ver
           let next = generate_cfg_from_stmts rest cfg last_vert in
           generate_cfg_from_cond_stmts cond_stmts cfg next
         end
+      | VarDeclInit (var_name, rhs) -> 
+        let lhs_vert = CFG.create_vertex cfg (Instr(Assign(LVar var_name, convert_rhs rhs), next_vert)) in
+        generate_cfg_from_stmts rest cfg lhs_vert
       | AssignmentStmt a ->
-        begin match a with 
-          | Assignment (lhs, exp) -> 
-            let lhs_vert = CFG.create_vertex cfg (Instr(Assign(convert_lhs lhs, EVar "ret"), next_vert)) in
-            generate_cfg_from_stmts [Expr exp] cfg lhs_vert
-        end
+        let Assignment(lhs, exp) = a in
+        let lhs_vert = CFG.create_vertex cfg (Instr (Assign (convert_lhs lhs, EVar "ret"), next_vert)) in
+        generate_cfg_from_stmts [Expr exp] cfg lhs_vert
       | Expr expr -> 
         begin match expr with
           | RpcCallRHS rpc_call -> 

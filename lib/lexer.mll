@@ -106,6 +106,7 @@ and token = parse
   | "rpc_call" { RPC_CALL }
   | "tl" { TAIL }
   | "true" { TRUE true }
+  | "var" { VAR }
   | "ClientInterface" { CLIENT_INTERFACE }
   | id as s { ID s }
   | eof { EOF }
