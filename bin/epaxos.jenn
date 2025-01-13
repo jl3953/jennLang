@@ -31,7 +31,6 @@ Node {
         // 3: deps <- InterfL
         seq = 1;
         deps = [];
-        log = {}; // hoisted
         for (replica = 0; replica < len(cmds); replica = replica + 1) {
             deps = append(deps, {});
             for (inst_num = 0; inst_num < len(cmds[replica]); inst_num = inst_num + 1) {
@@ -72,7 +71,6 @@ Node {
         recvd = 1;
         timedout = false;
         fast_quorum = len(replicas)-1;
-        any = {};
         fast_path = true;
         preacceptoks = [];
         for (i = 0; i < len(replicas); i = i+1) {
@@ -95,7 +93,6 @@ Node {
                         print("DEPS");
                         print(any["deps"]);
                         print(deps);
-                        print("OKKKKKKKKK");
                         preacceptoks[any["sender"]] = any;
                     }
                 case "TIMEOUT":
@@ -128,7 +125,6 @@ Node {
         // 6: update seq <- max({seq} UNION {seq nums from all dependencies on this replica})
         // 7: update deps <- deps UNION Interf
         seqR = 1;
-        log = {};
         for (replica = 0; replica < len(cmds); replica = replica + 1) {
             for (inst_num = 0; inst_num < len(cmds[replica]); inst_num = inst_num + 1) {
                 log = cmds[replica][inst_num];

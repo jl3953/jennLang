@@ -697,35 +697,6 @@ let exec (state : state) (program : program) (record : record)  =
                 let new_env = Env.create 91 in
                 List.iter2 (fun (formal, _) actual ->
                     Env.add new_env formal (eval env actual)) formals actuals;
-                begin
-                  if func <> "BASE_NODE_INIT" then
-                    let rec traverse (label : 'a label) : (string * expr) list =
-                      match label with
-                      | Instr (i, n) ->
-                        begin match i with
-                          | Assign (lhs, expr) -> 
-                            (* Printf.printf "JENNDEBUGDERP lhs %s, expr %s\n" (to_string_lhs lhs) (to_string_expr expr); *)
-                            begin match lhs with
-                              | LVar var -> (var, expr) :: traverse (CFG.label program.cfg n)
-                              | _ -> traverse (CFG.label program.cfg n)
-                            end
-                          | _ -> traverse (CFG.label program.cfg n)
-                        end
-                      | Pause n -> traverse (CFG.label program.cfg n)
-                      | Await (_, _, n) -> traverse (CFG.label program.cfg n)
-                      | Return _ -> []
-                      | Cond (_, _, e) -> traverse (CFG.label program.cfg e) (* TODO jenndebug this is incorrect, then clause missing *)
-                      | ForLoopIn (_, _, b, n) -> (traverse (CFG.label program.cfg b)) @ (traverse (CFG.label program.cfg n))
-                      | Print (_, n) -> traverse (CFG.label program.cfg n)
-                      | Break n -> traverse (CFG.label program.cfg n)
-                    in 
-                    let local_vars = traverse (CFG.label program.cfg entry) in
-                    List.iter (fun (var, _) -> 
-                        if not((Env.mem state.nodes.(node_id) var) 
-                               || (Env.mem new_env var)) then
-                          Env.add new_env var (VBool false)
-                      ) local_vars
-                end;
                 let new_record =
                   { node = node_id
                   ; pc = entry
