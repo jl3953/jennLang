@@ -25,15 +25,17 @@ Node {
         
         // 1: increment instance number iL <- iL + 1
         instance_num = instance_num + 1;
+        var iL = 0;
         iL = instance_num;
 
         // 2: seq <- 1 + max({seq nums of all interfering i.e. dependency commands} UNION {0})
         // 3: deps <- InterfL
-        seq = 1;
-        deps = [];
+        var seq = 1;
+        var deps = [];
         for (replica = 0; replica < len(cmds); replica = replica + 1) {
             deps = append(deps, {});
             for (inst_num = 0; inst_num < len(cmds[replica]); inst_num = inst_num + 1) {
+                var log = {};
                 log = cmds[replica][inst_num];
                 if (("key" exists log) && (log["key"] == key)) {
                     deps[replica][inst_num] = {
@@ -59,7 +61,7 @@ Node {
         
         // 5: send pre-accept(cmd, seq, deps, L.iL) to all other replicas in F, where F is a fast fast_quorum
         // that includes L
-        resps = {};
+        var resps = {};
         for (i = 0; i < len(replicas); i = i+1) {
             if (i != self) {
                 resps[replicas[i]] = rpc_async_call(i, PreAccept(self, cmd, key, seq, deps, iL));
@@ -68,16 +70,18 @@ Node {
 
         //resps["timeout"] = set_timeout();
 
-        recvd = 1;
-        timedout = false;
+        var recvd = 1;
+        var timedout = false;
+        var fast_quorum = 0;
         fast_quorum = len(replicas)-1;
-        fast_path = true;
-        preacceptoks = [];
+        var fast_path = true;
+        var preacceptoks = [];
         for (i = 0; i < len(replicas); i = i+1) {
             preacceptoks = append(preacceptoks, {});
         }
         for (i = 0; (recvd < fast_quorum) && !timedout; i = 0) {
             await has_next_resp(resps);
+            var any = {};
             any = next_resp(resps);
 
             // TODO there's some stuff here about checking the responses
@@ -124,9 +128,10 @@ Node {
 
         // 6: update seq <- max({seq} UNION {seq nums from all dependencies on this replica})
         // 7: update deps <- deps UNION Interf
-        seqR = 1;
+        var seqR = 1;
         for (replica = 0; replica < len(cmds); replica = replica + 1) {
             for (inst_num = 0; inst_num < len(cmds[replica]); inst_num = inst_num + 1) {
+                var log = {};
                 log = cmds[replica][inst_num];
                 if (("key" exists log) && (log["key"] == key)) {
                     if (!(inst_num exists (deps[replica]))) {

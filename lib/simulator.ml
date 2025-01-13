@@ -693,10 +693,12 @@ let exec (state : state) (program : program) (record : record)  =
             | VInt node_id ->
               begin
                 let new_future = ref None in
-                let { entry; formals; _ } = function_info func program in
+                let { entry; formals; locals; _ } = function_info func program in
                 let new_env = Env.create 91 in
                 List.iter2 (fun (formal, _) actual ->
                     Env.add new_env formal (eval env actual)) formals actuals;
+                List.iter (fun (var_name, _, expr) -> 
+                    Env.add new_env var_name (eval env expr)) locals;
                 let new_record =
                   { node = node_id
                   ; pc = entry
