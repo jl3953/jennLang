@@ -120,7 +120,7 @@ let convert_lhs(lhs : Ast.lhs) : Simulator.lhs =
   | FieldAccessLHS (_, _) -> failwith "TODO what on earth is FieldAccessLHS again?"
   | TupleLHS lefts -> LTuple lefts
 
-let rec generate_cfg_from_stmts (stmts : statement list) (cfg : CFG.t) (last_vert : CFG.vertex) : CFG.vertex =
+let rec generate_cfg_from_stmts (stmts : statement list) (cfg : CFG.t) (last_vert : CFG.vertex) : (CFG.vertex) =
   match stmts with
   | [] -> last_vert
   | stmt :: rest ->
@@ -128,16 +128,18 @@ let rec generate_cfg_from_stmts (stmts : statement list) (cfg : CFG.t) (last_ver
     begin match stmt with 
       | CondList (cond_stmts) ->
         begin
-          let next = generate_cfg_from_stmts rest cfg last_vert in
-          generate_cfg_from_cond_stmts cond_stmts cfg next
+          let vert = generate_cfg_from_cond_stmts cond_stmts cfg next_vert
+          in vert
         end
       | VarDeclInit (var_name, rhs) -> 
-        let lhs_vert = CFG.create_vertex cfg (Instr(Assign(LVar var_name, convert_rhs rhs), next_vert)) in
-        generate_cfg_from_stmts rest cfg lhs_vert
+        let value = convert_rhs rhs in
+        let vert = CFG.create_vertex cfg (Instr(Assign(LVar var_name, value), next_vert)) in
+        vert
       | AssignmentStmt a ->
         let Assignment(lhs, exp) = a in
         let lhs_vert = CFG.create_vertex cfg (Instr (Assign (convert_lhs lhs, EVar "ret"), next_vert)) in
-        generate_cfg_from_stmts [Expr exp] cfg lhs_vert
+        let vert = generate_cfg_from_stmts [Expr exp] cfg lhs_vert in
+        vert
       | Expr expr -> 
         begin match expr with
           | RpcCallRHS rpc_call -> 
@@ -224,9 +226,68 @@ and generate_cfg_from_match_stmt (match_exp : rhs) (cases : case_stmt list)
     body_vert, body_vert
   | CaseStmt(case_cond, stmts) :: rest ->
     let next_case_vert, next_body = generate_cfg_from_match_stmt match_exp rest cfg last in
-    let body_vert = if List.length(stmts) = 0 then next_body else generate_cfg_from_stmts stmts cfg last in
-    let case_vert = CFG.create_vertex cfg (Cond(EEqualsEquals(convert_rhs match_exp, convert_rhs case_cond), body_vert, next_case_vert)) in
-    case_vert, body_vert
+    let body_vert = 
+      if List.length(stmts) = 0 then 
+        next_body
+      else 
+        generate_cfg_from_stmts stmts cfg last 
+    in let case_vert = CFG.create_vertex cfg (Cond(EEqualsEquals(convert_rhs match_exp, convert_rhs case_cond), body_vert, next_case_vert)) 
+    in case_vert, body_vert
+
+let rec scan_ast_for_local_vars (stmts : statement list) : (string * typ * expr) list =
+  match stmts with
+  | [] -> []
+  | stmt :: rest ->
+    begin 
+      let rest_of_local_vars = scan_ast_for_local_vars rest in
+      match stmt with
+      | CondList (cond_stmts) -> 
+        let rec scan_cond_ast_for_local_vars (cond_stmts : cond_stmt list) : (string * typ * expr) list =
+          match cond_stmts with
+          | [] -> []
+          | IfElseIf(_, body) :: remaining_ifelses -> 
+            let local_vars = scan_ast_for_local_vars body in
+            let remaining_local_vars = scan_cond_ast_for_local_vars remaining_ifelses in
+            local_vars @ remaining_local_vars
+        in (scan_cond_ast_for_local_vars cond_stmts) @ rest_of_local_vars
+      | VarDeclInit (var_name, rhs) -> (var_name, TString, convert_rhs rhs) :: rest_of_local_vars
+      | ForLoop (init, _, _, body) ->
+        let init_var = 
+          begin match init with
+            | Assignment(lhs, rhs) -> 
+              begin match lhs with
+                | VarLHS(var_name) -> [(var_name, TString, convert_rhs rhs)]
+                | _ -> failwith "For loop init must be a variable assignment"
+              end
+          end
+        and body_vars = scan_ast_for_local_vars body in
+        init_var @ body_vars @ rest_of_local_vars
+      | ForLoopIn (lhs, rhs, body) ->
+        begin
+          let init_vars = 
+            match lhs with
+            | TupleLHS vars -> List.map (fun var -> (var, TString, EVar "dontcare")) vars
+            | VarLHS var -> [(var, TString, convert_rhs rhs)]
+            | _ -> failwith "For loop in must be a variable assignment"
+          and body_vars = scan_ast_for_local_vars body in
+          init_vars @ body_vars @ rest_of_local_vars
+        end
+      | Match (_, case_stmts) ->
+        let rec scan_case_stmts_for_local_vars (case_stmts : case_stmt list) : (string * typ * expr) list =
+          match case_stmts with
+          | [] -> []
+          | DefaultStmt(stmts) :: _ -> scan_ast_for_local_vars stmts
+          | CaseStmt(_, stmts) :: remaining_case_stmts ->
+            (scan_ast_for_local_vars stmts) @ (scan_case_stmts_for_local_vars remaining_case_stmts)
+        in (scan_case_stmts_for_local_vars case_stmts) @ rest_of_local_vars
+      | AssignmentStmt _
+      | Expr _
+      | Comment
+      | Await _
+      | Print _
+      | BreakStmt 
+      | Return _ -> rest_of_local_vars
+    end
 
 let process_func_def (func_def : func_def) (cfg : CFG.t) : function_info =
   match func_def with
@@ -241,11 +302,12 @@ let process_func_def (func_def : func_def) (cfg : CFG.t) : function_info =
                 | VarRHS(formal) -> (formal, TString)
                 | _ -> failwith "what param is this?"
               end
-          ) params in
+          ) params 
+        and locals = scan_ast_for_local_vars body in
         { entry = entry
         ; name = func_name
         ; formals = formals
-        ; locals = []
+        ; locals = locals
         }
     end
 
@@ -423,7 +485,6 @@ let init_topology (topology : string) (global_state : state) (prog : program) : 
     | "FULL" -> raise (Failure "Not implemented FULL topology")
     | _ -> raise (Failure "Invalid topology")
   end
-
 
 let interp (spec : string) (intermediate_output : string) (scheduler_config_json : string) : unit =
 
