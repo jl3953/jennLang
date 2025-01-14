@@ -262,12 +262,12 @@ let rec scan_ast_for_local_vars (stmts : statement list) : (string * typ * expr)
           end
         and body_vars = scan_ast_for_local_vars body in
         init_var @ body_vars @ rest_of_local_vars
-      | ForLoopIn (lhs, rhs, body) ->
+      | ForLoopIn (lhs, _, body) ->
         begin
           let init_vars = 
             match lhs with
-            | TupleLHS vars -> List.map (fun var -> (var, TString, EVar "dontcare")) vars
-            | VarLHS var -> [(var, TString, convert_rhs rhs)]
+            | TupleLHS vars -> List.map (fun var -> (var, TString, EInt 214)) vars
+            | VarLHS var -> [(var, TString, EInt 214)]
             | _ -> failwith "For loop in must be a variable assignment"
           and body_vars = scan_ast_for_local_vars body in
           init_vars @ body_vars @ rest_of_local_vars

@@ -70,16 +70,18 @@ Node {
 
         //resps["timeout"] = set_timeout();
 
-        var recvd = 1;
-        var timedout = false;
-        var fast_quorum = 0;
+        var fast_quorum = 0; // declaration
         fast_quorum = len(replicas)-1;
+        var timedout = false;
+        var fq_recvd = 1;
+        var disagreed_resps = 0;
         var fast_path = true;
-        var preacceptoks = [];
-        for (i = 0; i < len(replicas); i = i+1) {
-            preacceptoks = append(preacceptoks, {});
-        }
-        for (i = 0; (recvd < fast_quorum) && !timedout; i = 0) {
+
+        var preaccept_resps = {};
+        for (i = 0; (fq_recvd < fast_quorum)
+                    && ((fq_recvd + disagreed_resps) < len(replicas))
+                    && !timedout;
+            i = 0) {
             await has_next_resp(resps);
             var any = {};
             any = next_resp(resps);
@@ -87,18 +89,17 @@ Node {
             // TODO there's some stuff here about checking the responses
             match(any["type"]) {
                 case "PreAcceptOK":
-                    recvd = recvd + 1;
                     if ((any["seq"] != seq) || (any["deps"] != deps)) {
-                        fast_path = false;
-                        print("NO_FAST_PATH");
-                        print("SEQ_NUM");
-                        print(any["seq"]);
-                        print(seq);
-                        print("DEPS");
-                        print(any["deps"]);
-                        print(deps);
-                        preacceptoks[any["sender"]] = any;
+                        disagreed_resps = disagreed_resps + 1;
+                        if (disagreed_resps >= 2) {
+                            // can only tolerate at most 1 disagreed response
+                            fast_path = false;
+                        }
+                    } else {
+                        // agreed--fast quorum path
+                        fq_recvd = fq_recvd + 1; 
                     }
+                    preaccept_resps[any["sender"]] = any;
                 case "TIMEOUT":
                     timedout = true;
                 default:
@@ -117,8 +118,75 @@ Node {
                 } 
             }
         } else {
-            print("nofastpath");
-            print(preacceptoks);
+            // 13, 14: union of all deps, largest seq num
+            for (sender, resp in preaccept_resps) {
+                for (replica in replicas) {
+                    replica_deps = resp["deps"][replica];
+                    for (iNum, log_cmd in replica_deps) {
+                        if (!(iNum exists (deps[replica]))) {
+                            deps[replica][iNum] = log_cmd;
+                        }
+                    }
+                }
+                
+                if (resp["seq"] > seq) {
+                    seq = resp["seq"];
+                }
+            }
+
+            // 15: run Paxos-Accept phase
+
+            // 16: cmds[L][i] <- (cmd, seq, deps) at instance L.i
+            cmds[self][iL]["seq"] = seq;
+            cmds[self][iL]["deps"] = deps;
+            cmds[self][iL]["status"] = "ACCEPTED"; 
+
+            // 17: send Accept(cmd, seq, deps, L.i) to at least floor(N/2) other replicas
+            var accept_resps = {};
+            for (peer in replicas) {
+                if (peer != self) {
+                    accept_resps[peer] = rpc_async_call(peer, Accept(self, cmd, key, seq, deps, iL));
+                }
+            }
+
+            // accept_resps["timeout"] = set_timeout();
+
+            // 20: on receiving at least floor(N/2) AcceptOKs,
+            // run commit phase for (cmd, seq, deps) at L.i
+            recvd = 1;
+            var majority = 0;
+            majority = len(replicas) / 2;
+            timedout = false;
+            for (placeholder = 0; (recvd < majority) && !timedout; placeholder = 0) {
+                await has_next_resp(accept_resps);
+                var any = {};
+                any = next_resp(accept_resps);
+
+                match(any["type"]) {
+                    case "AcceptOK":
+                        recvd = recvd + 1;
+                    case "TIMEOUT":
+                        timedout = true;
+                    default: 
+                        print("defaulted_accepted");
+                }
+            }
+
+            if (timedout) {
+                print("timedout_in_paxos_accept");
+            } else {
+                // 21: cmdsL[L][i] <- (cmd, seq, deps, committed)
+                cmds[self][iL]["status"] = "COMMITTED";
+
+                // 22: send commit notification for cmd to client
+
+                // 23: send Commit(cmd, seq, deps, L.i) to all other replicas
+                for (peer in replicas) {
+                    if (peer != self) {
+                        rpc_async_call(peer, Commit(self, cmd, key, seq, deps, iL)); 
+                    }
+                }
+            }
         }
 
         return true;
@@ -186,6 +254,18 @@ Node {
             "deps": deps,
             "status": "COMMITTED",
             "key": key
+        };
+    }
+
+    func Accept(sender, cmd, key, seq, deps, iL) -> Map {
+        cmds[sender][iL]["seq"] = seq;
+        cmds[sender][iL]["deps"] = deps;
+        cmds[sender][iL]["status"] = "ACCEPTED";
+
+        return {
+            "cmd": cmd,
+            "key": key,
+            "iL": iL
         };
     }
 }

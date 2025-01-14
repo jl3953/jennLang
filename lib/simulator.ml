@@ -263,11 +263,19 @@ type program =
   ; client_ops : function_info Env.t }(* jenndbg why does an RPC handler need a list of function info *)
 
 let load (var : string) (env : record_env) : value =
-  try begin 
-    Env.find env.local_env var
-  end
-  with Not_found -> begin 
+  try
+    begin 
+      Env.find env.local_env var
+    end
+  with Not_found ->
+  try
+    begin
       Env.find env.node_env var
+    end
+  with Not_found ->
+    begin
+      Printf.printf "load fail: %s\n" var;
+      failwith "Variable not found"
     end
 
 (* Evaluate an expression in the context of an environment. *)
@@ -302,7 +310,21 @@ let rec eval (env : record_env) (expr : expr) : value =
           | VMap map -> Hashtbl.find map (eval env k)
           | _ -> failwith "EFind eval fail: cannot index into anything else but map with string"
         end
-      | _ -> failwith "EFind eval fail: collection is not map nor string"
+      | VBool _ -> 
+        Printf.printf "Collection %s is bool, cannot index into using %s\n" (to_string_expr c) (to_string_expr k);
+        failwith "EFind eval fail: collection is neither map nor string"
+      | VInt _ ->
+        Printf.printf "Collection %s is int, cannot index into using %s\n" (to_string_expr c) (to_string_expr k);
+        failwith "EFind eval fail: collection is neither map nor string"
+      | VFuture _ ->
+        Printf.printf "Collection %s is future, cannot index into using %s\n" (to_string_expr c) (to_string_expr k);
+        failwith "EFind eval fail: collection is neither map nor string"
+      | VNode _ ->
+        Printf.printf "Collection %s is node, cannot index into using %s\n" (to_string_expr c) (to_string_expr k);
+        failwith "EFind eval fail: collection is neither map nor string"
+      | VOption _ ->
+        Printf.printf "Collection %s is option, cannot index into using %s\n" (to_string_expr c) (to_string_expr k);
+        failwith "EFind eval fail: collection is neither map nor string"
     end
   | ENot e -> 
     begin match eval env e with
@@ -437,7 +459,9 @@ let rec eval (env : record_env) (expr : expr) : value =
   | EKeyExists (key, mp) ->
     begin match eval env key, eval env mp with
       | k, VMap m -> VBool (Hashtbl.mem m k)
-      | _ -> failwith "EKeyExists eval fail"
+      | _ -> 
+        Printf.printf "%s is not a map, key %s may not exist\n" (to_string_expr mp) (to_string_expr key);
+        failwith "EKeyExists eval fail"
     end
   | EListLen e ->
     begin match eval env e with
@@ -461,7 +485,9 @@ let rec eval (env : record_env) (expr : expr) : value =
   | EPlus (e1, e2) ->
     begin match eval env e1, eval env e2 with
       | VInt i1, VInt i2 -> VInt (i1 + i2)
-      | _, VBool _ -> failwith "EPlus eval fail _, VBool";
+      | _, VBool _ -> 
+        Printf.printf "e1 %s, e2 %s\n" (to_string_expr e1) (to_string_expr e2);
+        failwith "EPlus eval fail _, VBool"
       | VBool _, _ -> 
         Printf.printf "e1 %s, e2 %s\n" (to_string_expr e1) (to_string_expr e2); 
         failwith "EPlus eval fail VBool _";
@@ -654,7 +680,9 @@ let store (lhs : lhs) (vl : value) (env : record_env) : unit =
             let lst = !ref_l in
             ref_l := List.mapi (fun j x -> if j = i then vl else x) lst
           end
-      | _ -> failwith "Can't index into a list with non-integer"
+      | _ -> 
+        Printf.printf "failed to index into %s\n" (to_string_lhs lhs);
+        failwith "Can't index into a list with non-integer"
     end
   | LVTuple _ -> failwith "how to store LVTuples?"
 
@@ -674,7 +702,14 @@ let copy (lhs : lhs) (vl : value) (env : record_env) : unit =
     end
   | _ -> failwith "copying only to local_copy"
 
-let function_info name program = Env.find program.rpc name
+let function_info name program = 
+  try
+    Env.find program.rpc name
+  with Not_found ->
+    begin
+      Printf.printf "function %s is not defined\n" name;
+      failwith "Function not found"
+    end
 
 (* Execute record until pause/return.  Invariant: record does *not* belong to
    state.records *)
@@ -695,8 +730,16 @@ let exec (state : state) (program : program) (record : record)  =
                 let new_future = ref None in
                 let { entry; formals; locals; _ } = function_info func program in
                 let new_env = Env.create 91 in
-                List.iter2 (fun (formal, _) actual ->
-                    Env.add new_env formal (eval env actual)) formals actuals;
+                begin
+                  try
+                    List.iter2 (fun (formal, _) actual ->
+                        Env.add new_env formal (eval env actual)) formals actuals;
+                  with Invalid_argument _ -> 
+                    Printf.printf "Func %s mismatches def and caller args
+                    formals: %s
+                    actuals: %s\n" func (String.concat ", " (List.map fst formals)) (String.concat ", " (List.map (to_string_expr) actuals));
+                    failwith "Mismatched arguments in function call"
+                end;
                 List.iter (fun (var_name, _, expr) -> 
                     Env.add new_env var_name (eval env expr)) locals;
                 let new_record =
@@ -806,23 +849,28 @@ let exec (state : state) (program : program) (record : record)  =
               loop()
             end
           else
-            let single_pair = 
-              let result_ref = ref None in Hashtbl.iter (fun key value ->
-                  match !result_ref with
-                    Some _ -> ()  (* We already found a pair, so do nothing *)
-                  | None -> result_ref := Some (key, value)
-                ) map;
-              !result_ref in
-            Hashtbl.remove map (fst (Option.get single_pair));
-            store (LVar "local_copy") (VMap map) env;
-            begin match lhs with
-              | LTuple [key; value] -> 
-                let (k, v) = Option.get single_pair in
-                Env.add env.node_env key k;
-                Env.add env.node_env value v;
-                record.pc <- body;
-                loop () 
-              | _ -> failwith "Cannot iterate through map with anything other than a 2-tuple"
+            begin
+              let single_pair = 
+                let result_ref = ref None in 
+                Hashtbl.iter (fun key value ->
+                    match !result_ref with
+                    | Some _ -> ()  (* We already found a pair, so do nothing *)
+                    | None -> result_ref := Some (key, value)
+                  ) map;
+                !result_ref in
+              Hashtbl.remove map (fst (Option.get single_pair));
+              store (LVar "local_copy") (VMap map) env;
+              begin match lhs with
+                | LTuple [key; value] -> 
+                  let (k, v) = Option.get single_pair in
+                  Env.add env.local_env key k;
+                  Env.add env.local_env value v;
+                  record.pc <- body;
+                  loop () 
+                | _ -> 
+                  Printf.printf "failed to iterate map with lhs: %s\n" (to_string_lhs lhs);
+                  failwith "Cannot iterate through map with anything other than a 2-tuple"
+              end
             end
         | VList list_ref -> 
           (* First remove the pair being processed from the map. *)
@@ -843,7 +891,7 @@ let exec (state : state) (program : program) (record : record)  =
             store (LVar "local_copy") (VList list_ref) env;
             begin match lhs with
               | LVar var -> 
-                Env.add env.node_env var (Option.get removed_item);
+                Env.add env.local_env var (Option.get removed_item);
                 record.pc <- body;
                 loop ()
               | LAccess _ -> failwith "Cannot iterate through list with anything other than a variable LAccess"
